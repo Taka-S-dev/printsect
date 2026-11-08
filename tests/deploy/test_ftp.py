@@ -11,6 +11,7 @@ pytest.importorskip("pyftpdlib")
 
 from pyftpdlib.authorizers import DummyAuthorizer  # noqa: E402
 from pyftpdlib.handlers import FTPHandler  # noqa: E402
+from pyftpdlib.ioloop import IOLoop  # noqa: E402
 from pyftpdlib.servers import ThreadedFTPServer  # noqa: E402
 
 from printsect.core.errors import ConfigError  # noqa: E402
@@ -33,12 +34,15 @@ def server(tmp_path):
         pass
 
     Handler.authorizer = auth
-    srv = ThreadedFTPServer(("127.0.0.1", 0), Handler)
+    # Its own loop: the default is shared, and a server shutting down at the end of one
+    # test would close the connections of the next.
+    srv = ThreadedFTPServer(("127.0.0.1", 0), Handler, ioloop=IOLoop())
     port = srv.socket.getsockname()[1]
     thread = threading.Thread(target=srv.serve_forever, kwargs={"timeout": 0.1}, daemon=True)
     thread.start()
     yield remote, port
     srv.close_all()
+    thread.join(timeout=5)
 
 
 @pytest.fixture
