@@ -43,8 +43,9 @@ printsect checks them where they are.
 2. Fill in a section, then run `psect doctor`. It tries each part for real — reads
    the build with `make -n`, reaches the console, looks at the line chosen for the run
    banner, looks for the build and deploy commands — and for each one says ok, warn
-   or ng, with what to do next. It builds nothing, sends nothing to the target and
-   changes no file.
+   or ng, with what to do next. It builds nothing, puts no file or command on the
+   target and changes no file. With the ftp deployer, once the settings are approved,
+   it logs in to the target to try the address, user and password.
 3. When everything is ok, put a probe in and `psect run`.
 
 ```

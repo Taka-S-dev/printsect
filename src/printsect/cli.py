@@ -408,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_guide)
     p = sub.add_parser("doctor", parents=[common()],
-                       help="try each part psect run needs (builds and sends nothing)")
+                       help="try each part psect run needs (puts nothing on the target)")
     p.add_argument("--no-commands", action="store_true", help=argparse.SUPPRESS)  # agents
     p.set_defaults(func=cmd_doctor)
     p = sub.add_parser("approve", parents=[common()],
