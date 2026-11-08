@@ -7,6 +7,8 @@ import stat
 import tempfile
 from pathlib import Path
 
+from .errors import ConfigError
+
 # The kinds of Windows link; other reparse points (cloud files) are ordinary files.
 _LINK_TAGS = (0xA000000C, 0xA0000003)
 
@@ -35,6 +37,20 @@ def plain_or_absent(*paths: Path) -> bool:
     return True
 
 
+def require_plain(*paths: Path) -> Path:
+    """Stop if a path is a link rather than a real file or folder; gives back the last.
+
+    printsect keeps its state in the project, so a project can arrive with a link there:
+    reading through it reads or overwrites something outside, and opening one that leads
+    to a network share hands that server this PC's login.
+    """
+    for path in paths:
+        if not plain_or_absent(path):
+            raise ConfigError(f"{path} is a link or a device, and printsect does not read or "
+                              "write through one: remove it if you did not put it there")
+    return paths[-1]
+
+
 def write_atomic(path: Path, text: str) -> None:
     """Write `text` as UTF-8 with LF, so a reader never sees half a file."""
     fd, tmp = tempfile.mkstemp(prefix=".psect-", dir=path.parent)
@@ -48,8 +64,9 @@ def write_atomic(path: Path, text: str) -> None:
 
 
 def ensure_state_dir(state_dir: Path) -> None:
-    state_dir.mkdir(parents=True, exist_ok=True)
     ignore = state_dir / ".gitignore"
+    require_plain(state_dir, ignore)
+    state_dir.mkdir(parents=True, exist_ok=True)
     if not ignore.exists():
         # Keeps the state out of git without touching the project's own ignore file.
         ignore.write_text("*\n", encoding="utf-8")

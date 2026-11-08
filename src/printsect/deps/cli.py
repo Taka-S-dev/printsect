@@ -35,7 +35,7 @@ def no_marks(project: Project) -> dict[str, list[dict[str, Any]]]:
 def _load(args: argparse.Namespace, proj: Project) -> Graph:
     from . import DEPS_FILE, load, make_scanner, runs_unasked, save
 
-    if not (proj.state_dir / DEPS_FILE).is_file():
+    if not proj.state_file(DEPS_FILE).is_file():
         settings = proj.settings.get("deps")
         if not runs_unasked(settings):
             raise PsectError(

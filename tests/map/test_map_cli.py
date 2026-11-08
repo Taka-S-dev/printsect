@@ -156,11 +156,13 @@ def test_a_saved_index_that_is_not_ours_is_thrown_away(project, capsys, files):
     assert out["files"] == 4
 
 
-def test_a_link_in_the_state_folder_is_neither_read_nor_written(project, capsys, monkeypatch):
+def test_a_link_in_the_state_folder_stops_the_map(project, capsys, monkeypatch):
+    from printsect.core import fsutil
+
     p = project(NET)
-    monkeypatch.setattr(index_module, "plain_or_absent", lambda *paths: False)
-    code, out = data(capsys, "--root", str(p.root))
-    assert code == 0 and out["files"] == 4
+    monkeypatch.setattr(fsutil, "plain_or_absent", lambda *paths: False)
+    assert main(["--root", str(p.root)]) == 2
+    assert "link" in capsys.readouterr().err
     assert not (p.root / ".printsect" / "map.json").exists()
 
 

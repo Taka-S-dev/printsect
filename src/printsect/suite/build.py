@@ -116,7 +116,7 @@ def load_graph(project: Project, log: Callable[[str], None], may_scan: bool = Tr
     from ..deps import DEPS_FILE, load, make_scanner, runs_unasked, save
 
     settings = project.settings.get("deps")
-    if (project.state_dir / DEPS_FILE).is_file():
+    if project.state_file(DEPS_FILE).is_file():
         graph = load(project)
         if not graph.stale_inputs(project.root):
             return graph

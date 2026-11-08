@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Union
 
 from .errors import ConfigError
+from .fsutil import require_plain
 
 CONFIG_NAME = "printsect.yaml"
 LOCAL_CONFIG_NAME = "printsect.local.yaml"
@@ -120,7 +121,7 @@ def find_root(start: Path) -> Path:
     """The nearest folder at or above `start` holding a root marker, else `start`."""
     start = start.resolve()
     for folder in (start, *start.parents):
-        if any((folder / marker).exists() for marker in ROOT_MARKERS):
+        if any(os.path.lexists(folder / marker) for marker in ROOT_MARKERS):
             return folder
     return start
 
@@ -155,7 +156,11 @@ class Project:
 
     @property
     def state_dir(self) -> Path:
-        return self.root / STATE_DIR
+        return require_plain(self.root / STATE_DIR)
+
+    def state_file(self, name: str) -> Path:
+        """A file or folder in the state folder; stops if either is a link."""
+        return require_plain(self.state_dir / name)
 
     @property
     def prefix(self) -> str:
@@ -197,7 +202,7 @@ class Project:
 
 def chosen_device(root: Path) -> str | None:
     """The device `psect use` chose for this project, if any."""
-    path = root / STATE_DIR / DEVICE_FILE
+    path = require_plain(root / STATE_DIR, root / STATE_DIR / DEVICE_FILE)
     try:
         name = path.read_text(encoding="utf-8").strip()
     except OSError:

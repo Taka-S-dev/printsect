@@ -14,6 +14,7 @@ deps does not follow headers.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -39,11 +40,9 @@ def _archive_modules(proj: Project) -> dict[str, str] | None:
     Only the saved reading is looked at: the map runs nothing, so it never starts make.
     """
     from .core.errors import PsectError
-    from .core.fsutil import plain_or_absent
     from .deps import DEPS_FILE, load
 
-    saved = proj.state_dir / DEPS_FILE
-    if not plain_or_absent(proj.state_dir, saved) or not saved.is_file():
+    if not proj.state_file(DEPS_FILE).is_file():
         return None
     owner: dict[str, str] = {}
     try:
@@ -61,14 +60,6 @@ def _archive_modules(proj: Project) -> dict[str, str] | None:
     if any(not (isinstance(n, str) and n.isprintable()) for pair in owner.items() for n in pair):
         return None
     return owner or None
-
-
-def _map_marks(proj: Project) -> dict[str, list[dict[str, Any]]]:
-    from .core.fsutil import plain_or_absent
-
-    if not plain_or_absent(proj.state_dir, proj.state_dir / "probes.json"):
-        return {}
-    return _probe_marks(proj)
 
 
 def _warn_probe_in_untraced_header(proj: Project, probe: Any) -> list[str]:
@@ -127,7 +118,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             text = init_template(template, language(args.lang))
             (root / name).write_text(text, encoding="utf-8", newline="\n")
             made.append(name)
-    if not (root / STATE_DIR).exists():
+    if not os.path.lexists(root / STATE_DIR):
         ensure_state_dir(root / STATE_DIR)
         made.append(STATE_DIR + "/")
     text = "made " + ", ".join(made) if made else "already set up"
@@ -235,7 +226,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     if not args.json:
         print("\n".join(lines[:5]))
     started = time.time()
-    failed = execute(proj, planned.steps, proj.state_dir / "build.log", log)
+    failed = execute(proj, planned.steps, proj.state_file("build.log"), log)
     if not failed and planned.steps:
         old = outdated(proj, planned.artifacts, started)
         if old:
@@ -247,14 +238,15 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_hits(args: argparse.Namespace) -> int:
     from .core.cli import project
+    from .core.fsutil import require_plain
     from .probe.cli import hit_lines
     from .probe.hits import count
     from .probe.ledger import Ledger
-    from .suite.run import last_run, runs_dir
+    from .suite.run import last_run, run_folder
 
     proj = project(args)
     n = args.run or last_run(proj)
-    log = runs_dir(proj) / str(n) / "console.log" if n else None
+    log = require_plain(run_folder(proj, n) / "console.log") if n else None
     if log is None or not log.is_file():
         raise PsectError("no run has read the console yet: psect run")
     lines = []
@@ -482,7 +474,7 @@ def build_parser() -> argparse.ArgumentParser:
     map_cli.configure(
         sub.add_parser("map", parents=[common()],
                        help="which module uses which (reads the source, runs nothing)"),
-        modules=_archive_modules, marks=_map_marks)
+        modules=_archive_modules, marks=_probe_marks)
     return parser
 
 

@@ -74,8 +74,7 @@ map:
 ```
 
 Folders starting with `.` are skipped, links are not followed, and a file over 4 MB
-(usually a generated table) or a declaration over 64 KB is counted and left out. If the state
-folder holds a link, the saved index is neither read nor written.
+(usually a generated table) or a declaration over 64 KB is counted and left out.
 
 Speed, with files the OS has already read once: the 948 source files of OpenSSL 1.1.1q
 took 1.6 seconds the first time and 0.3 after; about a million lines (8,000 files) took 11

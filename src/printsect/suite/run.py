@@ -29,7 +29,7 @@ from typing import Any
 from ..console import Console, Line, make_console, wait_for
 from ..core.config import Project, Schema
 from ..core.errors import ConfigError, PsectError
-from ..core.fsutil import ensure_state_dir, write_atomic
+from ..core.fsutil import ensure_state_dir, plain_or_absent, require_plain, write_atomic
 from ..core.timeutil import now
 from ..deploy import FAILED, WAITING_USER, DeployContext, make_deployer
 from ..probe.hits import Hit, count
@@ -85,14 +85,24 @@ class Hooks:
 
 
 def runs_dir(project: Project) -> Path:
-    return project.state_dir / "runs"
+    return project.state_file("runs")
+
+
+def _numbers(folder: Path) -> list[int]:
+    """The runs kept in `folder`; a link among them is not a run."""
+    return [int(p.name) for p in folder.iterdir()
+            if p.name.isdigit() and plain_or_absent(p) and p.is_dir()]
+
+
+def run_folder(project: Project, n: int) -> Path:
+    return require_plain(runs_dir(project) / str(n))
 
 
 def take_run_number(project: Project) -> int:
     folder = runs_dir(project)
     ensure_state_dir(project.state_dir)
     folder.mkdir(exist_ok=True)
-    taken = [int(p.name) for p in folder.iterdir() if p.is_dir() and p.name.isdigit()]
+    taken = _numbers(folder)
     n = max(taken, default=0) + 1
     (folder / str(n)).mkdir()
     return n
@@ -102,7 +112,7 @@ def last_run(project: Project) -> int | None:
     folder = runs_dir(project)
     if not folder.is_dir():
         return None
-    taken = [int(p.name) for p in folder.iterdir() if p.is_dir() and p.name.isdigit()]
+    taken = _numbers(folder)
     return max(taken, default=None)
 
 
@@ -198,7 +208,7 @@ def run(project: Project, hooks: Hooks, *, build: bool = True, deploy: bool = Tr
     report = verify(project)
     warnings = [f"#{n} is no longer in the source" for n in report.missing]
     n = take_run_number(project)
-    folder = runs_dir(project) / str(n)
+    folder = run_folder(project, n)
     result = RunResult(run=n, status=OK, stage="build", device=project.device,
                        warnings=warnings, folder=str(folder))
 
@@ -253,10 +263,10 @@ def run(project: Project, hooks: Hooks, *, build: bool = True, deploy: bool = Tr
 
 def _resume(project: Project, hooks: Hooks) -> RunResult:
     n = last_run(project)
-    folder = runs_dir(project) / str(n) if n else None
+    folder = run_folder(project, n) if n else None
     if folder is None or not (folder / "state.json").is_file():
         raise PsectError("there is no stopped run to carry on")
-    state = json.loads((folder / "state.json").read_text(encoding="utf-8"))
+    state = json.loads(require_plain(folder / "state.json").read_text(encoding="utf-8"))
     if state.get("stage") not in ("deploy", "reproduce"):
         raise PsectError(f"run {n} is not waiting for anything")
     result = RunResult(run=int(state["run"]), status=OK, stage="reproduce",

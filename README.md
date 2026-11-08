@@ -186,6 +186,9 @@ is itself part of what is approved. Not covered: binary build outputs, and files
 outside the project such as a toolchain's own makefiles (paths to them in
 `deps.command` are listed when approving).
 
+printsect keeps its state in `.printsect/`, and stops rather than read or write through
+a link there: a project could arrive with one leading outside it.
+
 Approval is a guard, not a sandbox. An agent that may edit the build itself — the
 Makefiles, the scripts they call — can change what an approved build runs on the next
 build, beyond what any listing can show. So let the agent edit sources and the

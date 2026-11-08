@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core.errors import PsectError
-from ..core.fsutil import ensure_state_dir, write_atomic
+from ..core.fsutil import ensure_state_dir, require_plain, write_atomic
 
 LEDGER_VERSION = 1
 
@@ -48,7 +48,7 @@ class Probe:
 class Ledger:
     def __init__(self, state_dir: Path) -> None:
         self.state_dir = state_dir
-        self.path = state_dir / "probes.json"
+        self.path = require_plain(state_dir, state_dir / "probes.json")
         self.next = 1
         self.probes: dict[int, Probe] = {}
         if self.path.is_file():

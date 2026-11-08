@@ -74,7 +74,7 @@ def save(project: Project, graph: Graph) -> None:
 
 
 def load(project: Project) -> Graph:
-    path = project.state_dir / DEPS_FILE
+    path = project.state_file(DEPS_FILE)
     if not path.is_file():
         raise PsectError("no dependency data yet: run `psect deps` first")
     try:

@@ -126,7 +126,7 @@ def _deps(project: Project, run_commands: bool = True) -> tuple[Finding, Any]:
     settings = project.settings.get("deps") or {}
     auto = (project.settings.get("build") or {}).get("artifacts") == "auto"
     if not run_commands:  # make -n runs $(shell ...) in Makefiles: not before approval
-        held = (project.state_dir / "deps.json").is_file()
+        held = project.state_file("deps.json").is_file()
         return Finding("deps", WARN, f"not run for an agent: reading the build "
                        f"({settings.get('command') or 'make -n -B -w'}) is not approved yet",
                        "the person checks it and runs psect approve (or psect doctor)"), (

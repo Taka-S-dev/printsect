@@ -19,7 +19,7 @@ from typing import Any
 
 from ..core.config import Project
 from ..core.errors import ConfigError
-from ..core.fsutil import ensure_state_dir, is_link, plain_or_absent, write_atomic
+from ..core.fsutil import ensure_state_dir, is_link, write_atomic
 from ..core.plugins import register
 from .scanner import scan
 
@@ -131,11 +131,8 @@ class ScanIndexer:
             return {}
 
     def index(self, project: Project, log: Callable[[str], None]) -> Index:
-        path = project.state_dir / INDEX_FILE
-        usable = plain_or_absent(project.state_dir, path, project.state_dir / ".gitignore")
-        if not usable:
-            log(f"note: {project.state_dir.name} holds a link; the map index is not used")
-        cached = self._load(path) if usable else {}
+        path = project.state_file(INDEX_FILE)
+        cached = self._load(path)
         index = Index()
         fresh: dict[str, dict[str, Any]] = {}
         todo: list[tuple[str, os.stat_result]] = []
@@ -167,7 +164,7 @@ class ScanIndexer:
                 defs=[(str(n), str(k), bool(st), int(line)) for n, k, st, line in item["d"]],
                 refs=item["r"].split(), macro_defs=int(item["x"]), unbalanced=bool(item["b"]),
                 too_long=int(item["l"]))
-        if usable and (todo or len(fresh) != len(cached)):
+        if todo or len(fresh) != len(cached):
             try:
                 ensure_state_dir(project.state_dir)
                 write_atomic(path, json.dumps(
