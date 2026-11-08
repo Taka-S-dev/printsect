@@ -94,3 +94,7 @@ deps:
 #   board-b:
 #     build: {artifact_path: "out/b/{name}"}
 #     deploy: {type: manual, message: "{artifact_name} を B 用のローダーで読み込んでください"}
+
+# 9. コードの地図（psect map）はここの C ファイルをすべて読みます。対象でないものは外します。
+# map:
+#   exclude: ["third_party/*", "tests/*"]

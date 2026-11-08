@@ -11,7 +11,8 @@ If `doctor` does not show every part ok, set the project up first (`guide` topic
 ## The loop
 
 1. **Start from the symptom.** Ask what the person saw, and how to make it happen
-   again. Read the code around it before touching anything.
+   again. Read the code around it before touching anything. In code you do not know,
+   `map` shows its parts and who uses whom, and `map_focus` one part's entrances.
 2. **Say a hypothesis**, such as "rx() is called with len 0". Each probe tests one.
 3. **Put probes in** with `probe_add`: always give `purpose` (what it is to find out)
    and `expect` (what a hit or a miss would mean). Print the values that decide the

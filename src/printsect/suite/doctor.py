@@ -35,11 +35,11 @@ class Finding:
 
 
 def all_sections() -> Schema:
-    from .. import console, deploy, deps, probe
+    from .. import console, deploy, deps, map, probe
     from .run import SECTIONS
 
     return {**CORE_SCHEMA, **console.SECTIONS, **deps.SECTIONS, **probe.SECTIONS,
-            **deploy.SECTIONS, **SECTIONS}
+            **deploy.SECTIONS, **map.SECTIONS, **SECTIONS}
 
 
 def _check_console(settings: Any) -> object:
@@ -74,12 +74,13 @@ def settings_problems(project: Project) -> list[str]:
 
 
 def _problems(project: Project) -> list[str]:
-    from .. import deploy, deps
+    from .. import deploy, deps, map
 
     plugin_sections: dict[str, Callable[[Any], object]] = {
         "deps": deps.make_scanner,
         "deploy": deploy.make_deployer,
         "console": _check_console,
+        "map": map.make_indexer,
     }
     top = {k: (v if k not in plugin_sections or not isinstance(v, dict)
                else {"type": v.get("type")} if "type" in v else {})

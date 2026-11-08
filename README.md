@@ -12,6 +12,7 @@ of them together through `psect`.
 | deps | `psect-deps` | `psect deps` | What each output of a C build is made from: sources and headers -> objects -> archives -> outputs. Reads the Makefile through `make -n`, so nothing is built. Tree, search, "what does this file go into", and a page for the browser. | [deps](src/printsect/deps/README.md) |
 | probe | `psect-probe` | `psect probe` | Put print probes into C source, keep a list of where they are and why, and take out only the ones it put in. | [probe](src/printsect/probe/README.md) |
 | console | `psect-console` | `psect console` | Read what the target prints, line by line, send it commands, and wait for a line. Opens a serial port itself, or goes through the program that already holds it (TCP, its command line, or its log file). | [console](src/printsect/console/README.md) |
+| map | `psect-map` | `psect map` | Which module of a C project uses which, read from the source without a build or any other program, short enough for an agent to read first. | [map](src/printsect/map/README.md) |
 | deploy | `psect-deploy` | `psect deploy` | Put the build on the target the way the config says (a command, FTP, or a person doing it). | [deploy](src/printsect/deploy/README.md) |
 
 How the tools are kept apart, and how to add one: [core](src/printsect/core/README.md).

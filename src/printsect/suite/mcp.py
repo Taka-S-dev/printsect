@@ -173,6 +173,18 @@ TOOLS = [
          {"find": _s("keep branches with a matching file"),
           "probed": _b("only branches holding a probe (default when find is not given)")},
          options={"find": "--find"}, switches={"probed": "--probed"}),
+    Tool("map", "The code's parts and who uses whom, most used first: read this first in code "
+         "you do not know. Names only, no compiler; says how much it left out.",
+         ["map"], {"top": _i("rows per list (default 30)"),
+                   "by_dir": _b("group by folder even when the build's archives are known")},
+         options={"top": "--top"}, switches={"by_dir": "--by-dir"}),
+    Tool("map_focus", "One module, archive or folder: who uses it through which symbols (with "
+         "file:line), what it uses, its files and which are entrances.",
+         ["map", "focus"], {"module": _s("a module or archive from map, or any folder"),
+                            "top": _i("rows per list (default 30)"),
+                            "by_dir": _b("group by folder even when archives are known")},
+         ("module",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
+         positional=("module",)),
     Tool("deps_scan", "Read the build again (after a Makefile or deps settings changed).",
          ["deps"]),
     Tool("console_read", "Console lines after line `since` (pass the last number you saw).",

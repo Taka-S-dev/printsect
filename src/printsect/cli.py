@@ -33,6 +33,44 @@ def _probe_marks(proj: Project) -> dict[str, list[dict[str, Any]]]:
     return marks(proj)
 
 
+def _archive_modules(proj: Project) -> dict[str, str] | None:
+    """Each source file the build uses -> its archive, once the build has been read.
+
+    Only the saved reading is looked at: the map runs nothing, so it never starts make.
+    """
+    from .core.errors import PsectError
+    from .core.fsutil import plain_or_absent
+    from .deps import DEPS_FILE, load
+
+    saved = proj.state_dir / DEPS_FILE
+    if not plain_or_absent(proj.state_dir, saved) or not saved.is_file():
+        return None
+    owner: dict[str, str] = {}
+    try:
+        graph = load(proj)
+        parents = graph.parents()
+        for obj, info in sorted(graph.objects.items()):
+            source = info.get("source")
+            if source:
+                held = sorted(parents.get(obj, []))
+                archives = [p for p in held if p in graph.archives]
+                owner.setdefault(source, (archives or held or ["(not in an archive)"])[0])
+    except (PsectError, AttributeError, TypeError, KeyError):
+        return None  # a saved reading that is not a graph: fall back to folders
+    # The reading may have come with the project, and its names reach terminals and agents.
+    if any(not (isinstance(n, str) and n.isprintable()) for pair in owner.items() for n in pair):
+        return None
+    return owner or None
+
+
+def _map_marks(proj: Project) -> dict[str, list[dict[str, Any]]]:
+    from .core.fsutil import plain_or_absent
+
+    if not plain_or_absent(proj.state_dir, proj.state_dir / "probes.json"):
+        return {}
+    return _probe_marks(proj)
+
+
 def _warn_probe_in_untraced_header(proj: Project, probe: Any) -> list[str]:
     from .deps import HEADERS_OFF_NOTE, is_header
 
@@ -107,15 +145,16 @@ TOOLS = {
     "deps": "psect-deps",
     "probe": "psect-probe",
     "deploy": "psect-deploy",
+    "map": "psect-map",
 }
 
 
 def _run_sections() -> Schema:
-    from . import console, deploy, deps, probe
+    from . import console, deploy, deps, map, probe
     from .suite.run import SECTIONS
 
     return {**console.SECTIONS, **deps.SECTIONS, **probe.SECTIONS, **deploy.SECTIONS,
-            **SECTIONS}
+            **map.SECTIONS, **SECTIONS}
 
 
 def _ask_here(args: argparse.Namespace) -> Callable[[str], str | None] | None:
@@ -352,10 +391,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_plugins(args: argparse.Namespace) -> int:
-    from . import console, deploy, deps  # noqa: F401  (registers builtins)
+    from . import console, deploy, deps, map  # noqa: F401  (registers builtins)
     from .core.plugins import available
 
-    roles = {role: available(role) for role in ("console", "deployer", "deps")}
+    roles = {role: available(role) for role in ("console", "deployer", "deps", "indexer")}
     lines = ["tools (each also runs on its own):"]
     lines += [f"  psect {name:<8} = {command}" for name, command in TOOLS.items()]
     for role, names in roles.items():
@@ -369,6 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
     from .console import cli as console_cli
     from .deploy import cli as deploy_cli
     from .deps import cli as deps_cli
+    from .map import cli as map_cli
     from .probe import cli as probe_cli
 
     parser = argparse.ArgumentParser(
@@ -439,6 +479,10 @@ def build_parser() -> argparse.ArgumentParser:
         console=_console_link)
     console = sub.add_parser("console", help="read the target's console, send it commands")
     console_cli.configure(console.add_subparsers(dest="action", required=True))
+    map_cli.configure(
+        sub.add_parser("map", parents=[common()],
+                       help="which module uses which (reads the source, runs nothing)"),
+        modules=_archive_modules, marks=_map_marks)
     return parser
 
 

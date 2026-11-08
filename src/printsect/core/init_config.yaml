@@ -93,3 +93,7 @@ deps:
 #   board-b:
 #     build: {artifact_path: "out/b/{name}"}
 #     deploy: {type: manual, message: "Load {artifact_name} with the B loader"}
+
+# 9. The code map (psect map) reads every C file here; leave out what is not part of it.
+# map:
+#   exclude: ["third_party/*", "tests/*"]
