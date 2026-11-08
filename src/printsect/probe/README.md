@@ -41,6 +41,27 @@ Every command takes `--json` and `--root DIR`.
   macros stay last; a line that is not the end of a statement gets a warning; the
   enclosing function is recorded.
 
+## Finding probes in an editor
+
+Every probe line carries the mark, so plain search finds it. With another
+`marker.prefix`, read that word for `PSECT` below.
+
+```sh
+grep -rn "PSECT-AI" src/                  # the agent's probes (marks and printed tags)
+grep -rnE "/[*/] *PSECT(-AI)?\b" src/     # every probe line, yours included
+psect probe list --quickfix               # file:line: text, for an editor's jump list
+```
+
+In VS Code, search with `Ctrl+Shift+F`, regular expressions on (`.*`), for
+`/[*/]\s*PSECT(-AI)?\b`. To colour the lines all the time, give any extension that
+highlights a regular expression the pattern `.*/[*/]\s*PSECT(-AI)?\b.*`.
+
+In Vim or Neovim, this marks the whole line in C files:
+
+```vim
+autocmd BufWinEnter *.c,*.h call matchadd('WarningMsg', '\v^.*/[*/]\s*PSECT(-AI)?>.*$')
+```
+
 ## Settings (`printsect.yaml`, all optional)
 
 ```yaml
