@@ -264,9 +264,10 @@ def run(project: Project, hooks: Hooks, *, build: bool = True, deploy: bool = Tr
 def _resume(project: Project, hooks: Hooks) -> RunResult:
     n = last_run(project)
     folder = run_folder(project, n) if n else None
-    if folder is None or not (folder / "state.json").is_file():
+    saved = require_plain(folder / "state.json") if folder else None
+    if folder is None or saved is None or not saved.is_file():
         raise PsectError("there is no stopped run to carry on")
-    state = json.loads(require_plain(folder / "state.json").read_text(encoding="utf-8"))
+    state = json.loads(saved.read_text(encoding="utf-8"))
     if state.get("stage") not in ("deploy", "reproduce"):
         raise PsectError(f"run {n} is not waiting for anything")
     result = RunResult(run=int(state["run"]), status=OK, stage="reproduce",
