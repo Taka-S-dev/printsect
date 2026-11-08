@@ -1,0 +1,30 @@
+# Allow-list: everything is ignored unless its path is named here.
+/*
+!/.gitattributes
+!/.github/
+!/.gitignore
+!/LICENSE
+!/README.md
+!/README.ja.md
+!/benchmarks/
+!/examples/
+!/pyproject.toml
+!/src/
+!/tests/
+!/uv.lock
+
+# Never, even inside the folders above.
+__pycache__/
+*.py[cod]
+.printsect/
+printsect.local.yaml
+.env
+.env.*
+.claude/
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+secrets.*
+credentials.*

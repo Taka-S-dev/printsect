@@ -1,0 +1,30 @@
+# printsect settings for this PC only, laid over printsect.yaml.
+# Keep this file out of version control (it names ports and tools on this PC).
+# Every name below is a made-up example.
+
+# The console: how printsect reads what the target prints.
+# A serial port has one owner; if a terminal program holds it, go through that program.
+
+# A program holding the port that answers JSON over local TCP:
+# console:
+#   type: tcp
+#   port: 8765
+#   read_request: {screen: true, lines: 500}
+#   send_request: {cmd: "{text}"}
+
+# A program with a command line that prints JSON:
+# console:
+#   type: command
+#   read: [mytool, screen, --json, --lines, "500"]
+#   send: [mytool, send, "{text}", --json]
+
+# Open the port here (pip install 'printsect[serial]'), when nothing else holds it:
+# console:
+#   type: serial
+#   port: COM3
+#   baudrate: 115200
+
+# A log file the terminal program writes (read only):
+# console:
+#   type: file
+#   path: C:/logs/target.log

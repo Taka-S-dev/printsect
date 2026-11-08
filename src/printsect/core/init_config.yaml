@@ -1,0 +1,95 @@
+# printsect settings, shared with everyone who works on this project.
+# Settings for one PC (ports, paths, tools on that PC) go in printsect.local.yaml,
+# which is laid over this file and is not to be committed.
+#
+# Fill in from the top, running `psect doctor` as you go: it tries each part for
+# real (without building or touching the target) and says what to do next.
+# `psect check` names any key that is misspelt or of the wrong type.
+#
+# Every name below (app/, netdrv, app_start, ...) is a made-up example.
+
+version: 1
+
+marker:
+  # The mark at the end of each probe line: /* PSECT-AI:group #7 */
+  prefix: PSECT
+
+probe:
+  # What a probe prints when no text is given.
+  # {tag} -> "PSECT-AI 7 group", {n} -> 7, {where} -> "file.c:61"
+  template: 'printf("[{tag}] %s:%d\n", __FILE__, __LINE__);'
+  encodings: [utf-8, cp932]
+
+# 1. How the build is read (psect deps). Nothing is built: make only prints (-n).
+deps:
+  command: make -n -B -w          # add the -f / -C / target you build with
+  cwd: .                          # where that command runs
+  headers: true                   # follow #include (needed when probing headers)
+
+# 2. How the build is made, and what goes to the target. Rules, filled in for the
+#    archives and outputs holding a probed file, run in the order written; a step
+#    without `for` runs once where it stands (a clean you must not forget).
+#    `psect build --plan` shows the commands without running them.
+#    In a rule: {made_in} the folder the build made it in, {name} libnet.a,
+#    {path} build/lib/libnet.a, {module} net, {dir} build/lib, {run} the run number.
+#    If making an output remakes its archives (make usually does), the outs rule
+#    alone is enough; try each command by hand with make -n first.
+#    `psect build --plan --all` shows them as if every source held a probe.
+# build:
+#   steps:
+#     - run: make clean
+#     - for: archives
+#       run: make -C {made_in}
+#     - for: outs
+#       run: make {path}               # {path}: as the build names it (a make target)
+#   artifacts: auto               # the outputs holding a probed file; or a list
+#   artifact_path: out/{device}/{name}   # where an output is taken from to deploy
+#   check_outputs: true           # stop when the build left an output unchanged
+#   # command: make {outs}        # or one command instead of steps
+
+# 3. Where the run banner goes: below a line every new build runs once at start
+#    (its init function), so its output is told from an old build's.
+#    ready: once the banner showed, wait for this line (the prompt) before reproducing.
+# run:
+#   banner: app/init.c:42         # FILE:LINE, relative to this folder
+#   ready: "^> "                 # a regular expression
+#   ready_timeout: 120
+
+# 4. How a build gets onto the target.
+# deploy:
+#   type: manual                  # a person transfers it with their own tool
+#   message: "Load {artifact_name} onto the target"
+#   # type: command               # or commands run here:
+#   # commands: ["mytool put {artifact} /target/"]
+# deploy:                         # or a target with an FTP server:
+#   type: ftp
+#   host: 192.168.0.10
+#   user: target                  # the password: a person sets PSECT_FTP_PASSWORD
+#   path: "/tmp/{artifact_name}"  # where the file goes on the target
+#   after: ["load /tmp/{artifact_name}"]   # then typed on the console to load it
+
+# 5. The console: set it in printsect.local.yaml (it depends on the PC).
+
+# 6. How to make the problem happen, once the new build runs.
+# reproduce:
+#   - send: app_start             # a command to the target (needs a console that sends)
+#   - wait: "ready"               # a line to wait for
+#   - ask: Unplug the cable       # a step for a person; psect run --resume goes on
+#   - sleep: 2
+
+# 7. When to stop reading the console.
+# stop:
+#   match: ["Exception", "assert"]
+#   quiet: 5                      # seconds with no output
+#   timeout: 120
+
+# 8. Devices: when the targets differ (where their outputs are kept, how they are
+#    loaded), name each one and write only what differs; it is laid over the rest.
+#    `psect use NAME` chooses one for this project; with several set up and none
+#    chosen, building and deploying stop rather than guess. {device} is its name.
+# devices:
+#   board-a:
+#     build: {artifact_path: "out/a/{name}"}
+#   board-b:
+#     build: {artifact_path: "out/b/{name}"}
+#     deploy: {type: manual, message: "Load {artifact_name} with the B loader"}

@@ -1,0 +1,4 @@
+version: 1
+marker: { prefix: PSECT }
+deps:
+  command: make -n -B -w

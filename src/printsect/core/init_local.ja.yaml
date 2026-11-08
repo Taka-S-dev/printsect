@@ -1,0 +1,31 @@
+# この PC だけの printsect の設定。printsect.yaml の上に重ねて読まれます。
+# このファイルはバージョン管理に入れないでください（この PC のポートや道具の名前が入るため）。
+# 下の名前はすべて架空の例です。
+
+# コンソール：対象機器の出力を printsect がどう読むか。
+# シリアルポートを開けるのは同時に 1 つのプログラムだけです。端末のプログラムが
+# ポートを開いているなら、そのプログラムを通して読みます。
+
+# ポートを開いているプログラムが、この PC の TCP で JSON を返す場合：
+# console:
+#   type: tcp
+#   port: 8765
+#   read_request: {screen: true, lines: 500}
+#   send_request: {cmd: "{text}"}
+
+# JSON を出力するコマンドラインを持つプログラムの場合：
+# console:
+#   type: command
+#   read: [mytool, screen, --json, --lines, "500"]
+#   send: [mytool, send, "{text}", --json]
+
+# 他に使っていなければ、ここでポートを開く場合（pip install 'printsect[serial]'）：
+# console:
+#   type: serial
+#   port: COM3
+#   baudrate: 115200
+
+# 端末のプログラムが書くログファイルを読む場合（読むだけ）：
+# console:
+#   type: file
+#   path: C:/logs/target.log

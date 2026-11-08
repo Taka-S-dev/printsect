@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="printsect">
+<title>__TITLE__</title>
+<style>
+:root {
+  --bg: #ffffff; --panel: #f6f7f9; --text: #1d2125; --muted: #5f6b76; --line: #dde1e6;
+  --accent: #2f6fd6; --hit-bg: #ffe58a; --hit-text: #1d2125; --probe: #0f7b6c;
+  --probe-bg: #e3f5f1; --warn-bg: #fff4d6; --warn-text: #6b4e00; --sel: #e8f0fd;
+  --out: #8a4fd6; --archive: #b8650f; --object: #2f6fd6; --header: #5f6b76;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181c; --panel: #1d2126; --text: #e4e7eb; --muted: #9aa5b1; --line: #2e343b;
+    --accent: #7aa7f5; --hit-bg: #7a5d00; --hit-text: #fff3c4; --probe: #5fd3bf;
+    --probe-bg: #143a34; --warn-bg: #3a2e0a; --warn-text: #f3d68a; --sel: #1f2d44;
+    --out: #b892f0; --archive: #e3a35a; --object: #7aa7f5; --header: #9aa5b1;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181c; --panel: #1d2126; --text: #e4e7eb; --muted: #9aa5b1; --line: #2e343b;
+  --accent: #7aa7f5; --hit-bg: #7a5d00; --hit-text: #fff3c4; --probe: #5fd3bf;
+  --probe-bg: #143a34; --warn-bg: #3a2e0a; --warn-text: #f3d68a; --sel: #1f2d44;
+  --out: #b892f0; --archive: #e3a35a; --object: #7aa7f5; --header: #9aa5b1;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  display: flex; flex-direction: column;
+}
+code, .mono, .tree, .chain, .list { font-family: ui-monospace, "Cascadia Mono", Consolas, "BIZ UDGothic", monospace; font-size: 13px; }
+header { padding: 12px 16px 0; }
+h1 { font-size: 16px; margin: 0 0 2px; }
+.meta { color: var(--muted); font-size: 12px; }
+.warn { margin: 8px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 13px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.search { flex: 1 1 260px; display: flex; gap: 6px; align-items: center; }
+.search input[type=search] {
+  flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: inherit;
+}
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.search input.bad { outline: 2px solid #d64545; }
+label.opt { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; font: inherit; cursor: pointer; }
+.tabs button[aria-selected=true] { background: var(--sel); color: var(--text); font-weight: 600; }
+button.small { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+button.small:hover, .tabs button:hover { color: var(--text); }
+main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 38%); min-height: 0; }
+#left { overflow: auto; padding: 8px 8px 24px 16px; }
+#right { overflow: auto; padding: 12px 16px 24px; background: var(--panel); border-left: 1px solid var(--line); }
+.empty { color: var(--muted); padding: 12px 0; }
+ul.tree, ul.tree ul { list-style: none; margin: 0; padding: 0; }
+ul.tree ul { margin-left: 9px; padding-left: 12px; border-left: 1px solid var(--line); }
+li.closed > ul { display: none; }
+.row { display: flex; align-items: center; gap: 6px; padding: 1px 6px 1px 0; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.row:hover { background: var(--sel); }
+.row.selected { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.tw { width: 16px; flex: none; text-align: center; color: var(--muted); border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+.tw.leaf { visibility: hidden; }
+.k { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; line-height: 15px; }
+.k.out { color: var(--out); } .k.archive { color: var(--archive); } .k.object { color: var(--object); } .k.header { color: var(--header); } .k.source { color: var(--object); }
+.src { color: var(--muted); }
+mark { background: var(--hit-bg); color: var(--hit-text); border-radius: 2px; padding: 0 1px; }
+.pr { flex: none; font-size: 12px; color: var(--probe); background: var(--probe-bg); border-radius: 10px; padding: 0 7px; }
+#right h2 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
+#right h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
+.chain { padding: 3px 0; word-break: break-all; }
+.chain .sep { color: var(--muted); padding: 0 4px; }
+a.go { color: var(--accent); text-decoration: none; cursor: pointer; }
+a.go:hover { text-decoration: underline; }
+.list { margin: 0; padding-left: 18px; }
+.list li { padding: 1px 0; word-break: break-all; }
+.probe-line { padding: 2px 0; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 16px; }
+table.h { border-collapse: collapse; width: 100%; }
+table.h th, table.h td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.h th { color: var(--muted); font-weight: 600; font-size: 12px; }
+table.h tr.selected td { background: var(--sel); }
+table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; cursor: pointer; }
+.meta { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .bar { gap: 8px 10px; }
+  .search { flex: 1 1 100%; order: -1; }
+  main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  #left { padding-left: 16px; padding-right: 16px; }
+  #right { border-left: 0; border-top: 1px solid var(--line); max-height: 45vh; }
+}
+</style>
+</head>
+<body>
+<script type="application/json" id="data">__DATA__</script>
+<header>
+  <h1 id="title"></h1>
+  <div class="meta" id="meta"></div>
+  <div class="warn" id="stale" hidden></div>
+</header>
+<div class="bar">
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-tree" aria-selected="true">Outputs</button>
+    <button role="tab" id="tab-headers" aria-selected="false">Headers</button>
+  </div>
+  <div class="search">
+    <input type="search" id="q" placeholder="Search files: text, *.h, or a regex  ( / )" autocomplete="off" spellcheck="false" aria-label="Search files">
+    <label class="opt"><input type="checkbox" id="o-regex"> regex</label>
+  </div>
+  <label class="opt"><input type="checkbox" id="o-sources"> .c names</label>
+  <label class="opt"><input type="checkbox" id="o-headers"> all headers</label>
+  <label class="opt"><input type="checkbox" id="o-probed"> probed only</label>
+  <button class="small" id="expand">Expand all</button>
+  <button class="small" id="collapse">Collapse</button>
+</div>
+<main>
+  <div id="left"></div>
+  <aside id="right" aria-live="polite"></aside>
+</main>
+<script>
+"use strict";
+// Sized for large projects (thousands of sources, about a million header uses):
+// lookups are indexed and remembered, folded branches are built only when opened,
+// and one drawing is held to a row budget.
+const D = JSON.parse(document.getElementById("data").textContent);
+const P = D.paths;
+const at = (i) => P[i];
+const outs = {}, archives = {}, objects = {};
+for (const [o, objs, archs, libs] of D.outs) {
+  outs[P[o]] = { objects: objs.map(at), archives: archs.map(at), libs };
+}
+for (const [a, objs] of D.archives) archives[P[a]] = { objects: objs.map(at) };
+for (const [o, src, dirs, hs] of D.objects) {
+  objects[P[o]] = { source: src < 0 ? null : P[src], include_dirs: dirs.map(at), headers: hs.map(at) };
+}
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const base = (p) => p.slice(p.lastIndexOf("/") + 1);
+const push = (map, key, value) => {
+  const list = map.get(key);
+  if (list) list.push(value); else map.set(key, [value]);
+};
+const ROW_BUDGET = 3000;  // rows drawn at once before branches start folded
+const LIST_MAX = 300;     // items shown in one list on the right
+
+// ---- graph -------------------------------------------------------------------
+const kindOf = (p) => p in outs ? "out" : p in archives ? "archive"
+  : p in objects ? "object" : null;
+const childrenOf = (p) => outs[p] ? [...outs[p].objects, ...outs[p].archives]
+  : archives[p] ? archives[p].objects : [];
+const parents = new Map();
+for (const c of [...Object.keys(outs), ...Object.keys(archives)]) {
+  for (const ch of childrenOf(c)) {
+    const list = parents.get(ch);
+    if (!list) parents.set(ch, [c]); else if (!list.includes(c)) list.push(c);
+  }
+}
+const roots = [...Object.keys(outs), ...Object.keys(archives)]
+  .filter((p) => !parents.has(p)).sort();
+const finals = roots.filter((p) => p in outs);
+const users = new Map();        // source or header -> objects built from it
+const headerUsers = new Map();  // header -> objects that read it
+for (const [o, info] of Object.entries(objects)) {
+  if (info.source) push(users, info.source, o);
+  for (const h of info.headers) { push(users, h, o); push(headerUsers, h, o); }
+}
+const probesOf = (f) => (f && D.probes[f]) || [];
+
+const rootsMemo = new Map();
+function rootsOf(node) {
+  if (rootsMemo.has(node)) return rootsMemo.get(node);
+  const found = new Set();
+  const stack = [node], seen = new Set([node]);
+  while (stack.length) {
+    const cur = stack.pop();
+    const up = parents.get(cur) || [];
+    if (!up.length) found.add(cur);
+    for (const p of up) {
+      if (rootsMemo.has(p)) rootsMemo.get(p).forEach((r) => found.add(r));
+      else if (!seen.has(p)) { seen.add(p); stack.push(p); }
+    }
+  }
+  rootsMemo.set(node, found);
+  return found;
+}
+const startsOf = (file) => (kindOf(file) ? [file] : []).concat(users.get(file) || []);
+function rootsForFile(file) {
+  const out = new Set();
+  for (const s of startsOf(file)) rootsOf(s).forEach((r) => out.add(r));
+  return [...out].sort();
+}
+function chainsFor(file, limit) {
+  const out = [];
+  const walk = (node, path) => {
+    if (out.length >= limit) return;
+    const up = (parents.get(node) || []).filter((p) => !path.includes(p));
+    if (!up.length) { out.push(path); return; }
+    for (const p of up) walk(p, [...path, p]);
+  };
+  for (const s of startsOf(file)) { if (out.length >= limit) break; walk(s, [s]); }
+  return out;
+}
+
+// ---- search ------------------------------------------------------------------
+function makeMatcher(q, regex) {
+  if (!q) return null;
+  if (regex) {
+    const rx = new RegExp(q, "i");  // throws on a bad pattern
+    return { test: (s) => !!s && rx.test(s), spans: (s) => spansOf(s, new RegExp(q, "gi")) };
+  }
+  if (/[*?[]/.test(q)) {
+    const src = "^" + q.replace(/[.+^${}()|\\]/g, "\\$&")
+      .replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+    const rx = new RegExp(src, "i");
+    const test = (s) => !!s && (rx.test(s) || rx.test(base(s)));
+    return {
+      test,
+      spans: (s) => {
+        const out = [];
+        let pos = 0;
+        for (const w of s.split(" ")) {
+          if (test(w)) out.push([pos, pos + w.length]);
+          pos += w.length + 1;
+        }
+        return out;
+      },
+    };
+  }
+  const low = q.toLowerCase();
+  return {
+    test: (s) => !!s && s.toLowerCase().includes(low),
+    spans: (s) => {
+      const out = [];
+      const l = s.toLowerCase();
+      for (let i = l.indexOf(low); i >= 0; i = l.indexOf(low, i + low.length)) {
+        out.push([i, i + low.length]);
+      }
+      return out;
+    },
+  };
+}
+function spansOf(s, rx) {
+  const out = [];
+  for (const m of s.matchAll(rx)) if (m[0].length) out.push([m.index, m.index + m[0].length]);
+  return out;
+}
+
+// ---- state -------------------------------------------------------------------
+const state = {
+  view: "tree", q: "", regex: false, sources: false, headers: false, probed: false,
+  selected: null, opened: new Set(), closed: new Set(), fold: "auto",  // auto | all | none
+};
+const KEPT = ["view", "regex", "sources", "headers", "probed"];
+try {
+  const saved = JSON.parse(localStorage.getItem("psect-deps") || "{}");
+  for (const k of KEPT) if (k in saved) state[k] = saved[k];
+} catch (e) { /* storage may be blocked */ }
+function remember() {
+  try {
+    localStorage.setItem("psect-deps", JSON.stringify(Object.fromEntries(KEPT.map((k) => [k, state[k]]))));
+  } catch (e) { /* storage may be blocked */ }
+}
+
+// ---- tree --------------------------------------------------------------------
+// A node: {path, kind, source, probes, hit, children, lazyHeaders}. With "all headers"
+// and no filter, an object's headers stay in lazyHeaders until its branch is opened.
+function build(M) {
+  const lazy = state.headers && !M && !state.probed;
+  const node = (path, anc, inherited) => {
+    const kind = kindOf(path) || "object";
+    const info = objects[path];
+    const src = kind === "object" && info ? info.source : null;
+    const mine = probesOf(src);
+    const hit = !!(M && (M.test(path) || M.test(src)));
+    const matched = inherited || !M || hit;
+    const kids = [];
+    let lazyHeaders = null;
+    const below = new Set(anc).add(path);
+    for (const c of childrenOf(path)) {
+      if (!below.has(c)) { const n = node(c, below, matched); if (n) kids.push(n); }
+    }
+    if (kind === "object" && info) {
+      if (lazy) lazyHeaders = info.headers;
+      else {
+        for (const h of info.headers) {
+          const hp = probesOf(h);
+          const hh = !!(M && M.test(h));
+          if (!(state.headers || hh || hp.length)) continue;
+          if ((matched || hh) && (!state.probed || hp.length)) {
+            kids.push({ path: h, kind: "header", probes: hp, hit: hh, children: [] });
+          }
+        }
+      }
+    }
+    let keep = matched && (!state.probed || mine.length > 0);
+    if (kind !== "object" && state.probed) keep = false;
+    if (!keep && !kids.length) return null;
+    return { path, kind, source: src, probes: mine, hit, children: kids, lazyHeaders };
+  };
+  return roots.map((r) => node(r, new Set(), false)).filter(Boolean);
+}
+const kidsOf = (n) => n.lazyHeaders
+  ? n.lazyHeaders.map((h) => ({ path: h, kind: "header", probes: probesOf(h), hit: false, children: [] }))
+  : n.children;
+const hasKids = (n) => n.children.length > 0 || (n.lazyHeaders && n.lazyHeaders.length > 0);
+function countNodes(nodes, limit) {
+  let n = 0;
+  const walk = (x) => { if (n > limit) return; n++; x.children.forEach(walk); };
+  nodes.forEach(walk);
+  return n;
+}
+
+function labelFor(n) {
+  if (n.kind !== "object") return n.path;
+  if (state.sources && n.source) return n.source;
+  return n.source ? base(n.path) + " ← " + n.source : n.path;
+}
+function highlighted(text, M) {
+  const frag = document.createDocumentFragment();
+  if (!M) { frag.append(text); return frag; }
+  let pos = 0;
+  for (const [a, b] of M.spans(text).sort((x, y) => x[0] - y[0])) {
+    if (a < pos) continue;
+    frag.append(text.slice(pos, a), el("mark", "", text.slice(a, b)));
+    pos = b;
+  }
+  frag.append(text.slice(pos));
+  return frag;
+}
+function probeChip(list) {
+  const chip = el("span", "pr", "● " + list.map((p) => "#" + p.n).join(" "));
+  chip.title = list.map((p) => "#" + p.n + (p.group ? " [" + p.group + "]" : "")
+    + (p.purpose ? ": " + p.purpose : "")).join("\n");
+  return chip;
+}
+const KIND_TAG = { out: "OUT", archive: "LIB", object: "OBJ", header: "H" };
+
+function renderTree(M) {
+  const left = $("left");
+  left.replaceChildren();
+  const nodes = build(M);
+  if (!nodes.length) {
+    left.append(el("div", "empty", roots.length ? "Nothing matches." : "The graph is empty: run psect deps."));
+    return;
+  }
+  const small = countNodes(nodes, 400) <= 400;
+  const note = el("div", "warn");
+  note.hidden = true;
+  left.append(note);
+  let budget = ROW_BUDGET;
+  let folded = 0;
+  const ul = el("ul", "tree");
+  ul.setAttribute("role", "tree");
+
+  const add = (n, parent, key, depth) => {
+    budget--;
+    const li = el("li");
+    li.setAttribute("role", "treeitem");
+    const has = hasKids(n);
+    let open = false;
+    if (has) {
+      if (state.opened.has(key)) open = true;
+      else if (state.closed.has(key)) open = false;
+      else {
+        open = state.fold === "all" || (state.fold === "auto" && (small || !!M || state.probed))
+          || depth < 1;
+        if (state.fold === "none") open = depth < 1;
+        if (open && budget <= 0 && depth > 0) { open = false; folded++; }
+      }
+    }
+    const row = el("div", "row");
+    row.dataset.path = n.path;
+    if (n.source) row.dataset.src = n.source;
+    if (state.selected === n.path || (n.source && state.selected === n.source)) {
+      row.classList.add("selected");
+    }
+    const tw = el("button", "tw" + (has ? "" : " leaf"), has ? (open ? "▾" : "▸") : "");
+    tw.tabIndex = -1;
+    row.append(tw, el("span", "k " + n.kind, KIND_TAG[n.kind]));
+    const label = el("span", "lbl");
+    label.append(highlighted(labelFor(n), M));
+    row.append(label);
+    if (n.probes.length) row.append(probeChip(n.probes));
+    row.addEventListener("click", () => select(n.kind === "object" && n.source ? n.source : n.path));
+    li.append(row);
+    let sub = null;
+    const fill = () => {
+      if (sub) return;
+      sub = el("ul");
+      sub.setAttribute("role", "group");
+      kidsOf(n).forEach((c, i) => add(c, sub, key + "\u0000" + i + c.path, depth + 1));
+      li.append(sub);
+    };
+    if (has) {
+      li.setAttribute("aria-expanded", String(open));
+      if (open) fill(); else li.classList.add("closed");
+      tw.setAttribute("aria-label", open ? "collapse" : "expand");
+      tw.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const nowOpen = li.classList.contains("closed");
+        if (nowOpen) { budget = Math.max(budget, 200); fill(); }
+        li.classList.toggle("closed", !nowOpen);
+        li.setAttribute("aria-expanded", String(nowOpen));
+        tw.textContent = nowOpen ? "▾" : "▸";
+        (nowOpen ? state.opened : state.closed).add(key);
+        (nowOpen ? state.closed : state.opened).delete(key);
+      });
+    }
+    parent.append(li);
+  };
+  nodes.forEach((n) => add(n, ul, n.path, 0));
+  left.append(ul);
+  if (folded) {
+    note.hidden = false;
+    note.textContent = "A large tree: " + folded + " branches start folded so the page stays quick. "
+      + "Open them with ▸, or search to narrow.";
+  }
+}
+
+const headerRoots = new Map();
+function rootsOfHeader(h) {
+  if (!headerRoots.has(h)) headerRoots.set(h, rootsForFile(h).map(base).join(", "));
+  return headerRoots.get(h);
+}
+function renderHeaders(M) {
+  const left = $("left");
+  left.replaceChildren();
+  const rows = [...headerUsers.keys()].sort()
+    .filter((h) => !M || M.test(h))
+    .filter((h) => !state.probed || probesOf(h).length);
+  if (!rows.length) {
+    left.append(el("div", "empty", headerUsers.size ? "Nothing matches." : "No headers found."));
+    return;
+  }
+  if (rows.length > ROW_BUDGET) {
+    left.append(el("div", "warn", "Showing " + ROW_BUDGET + " of " + rows.length
+      + " headers. Search to narrow."));
+  }
+  const t = el("table", "h");
+  const head = el("tr");
+  ["Header", "Objects", "Built into"].forEach((x) => head.append(el("th", "", x)));
+  t.append(head);
+  for (const h of rows.slice(0, ROW_BUDGET)) {
+    const tr = el("tr");
+    tr.dataset.path = h;
+    if (state.selected === h) tr.classList.add("selected");
+    const a = el("td");
+    a.append(highlighted(h, M));
+    if (probesOf(h).length) a.append(" ", probeChip(probesOf(h)));
+    tr.append(a, el("td", "", String(headerUsers.get(h).length)), el("td", "", rootsOfHeader(h)));
+    tr.addEventListener("click", () => select(h));
+    t.append(tr);
+  }
+  left.append(t);
+}
+
+// ---- details -----------------------------------------------------------------
+function go(path, text) {
+  const a = el("a", "go", text || path);
+  a.href = "#";
+  a.addEventListener("click", (ev) => { ev.preventDefault(); select(path); });
+  return a;
+}
+function objectText(o) {
+  const info = objects[o];
+  return info && info.source ? base(o) + " ← " + info.source : o;
+}
+function kindOfFile(p) {
+  return kindOf(p) || (headerUsers.has(p) ? "header" : users.has(p) ? "source" : null);
+}
+function list(items, make) {
+  const ul = el("ul", "list");
+  for (const item of items.slice(0, LIST_MAX)) { const li = el("li"); li.append(...make(item)); ul.append(li); }
+  if (items.length > LIST_MAX) ul.append(el("li", "hint", "… and " + (items.length - LIST_MAX) + " more"));
+  return ul;
+}
+function renderDetails() {
+  const right = $("right");
+  right.replaceChildren();
+  const p = state.selected;
+  if (!p) {
+    right.append(el("h2", "", "Pick a file"));
+    right.append(el("p", "hint", "Click a row to see what it is built from and what it is built "
+      + "into. Search with text, a pattern such as *.h, or a regular expression. "
+      + "Press / to search, Esc to clear."));
+    return;
+  }
+  const kind = kindOfFile(p) || "file";
+  const title = el("h2", "mono");
+  title.append(el("span", "k " + kind, kind.toUpperCase()), " ", p);
+  right.append(title);
+  const copy = el("button", "small", "Copy path");
+  copy.addEventListener("click", () => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(p).then(() => {
+      copy.textContent = "Copied";
+      setTimeout(() => { copy.textContent = "Copy path"; }, 1200);
+    }, () => {});
+  });
+  right.append(copy);
+
+  const probes = probesOf(p);
+  if (probes.length) {
+    right.append(el("h3", "", "Probes in this file"));
+    for (const pr of probes) {
+      const line = el("div", "probe-line mono");
+      line.append(probeChip([pr]), " ", (pr.group ? "[" + pr.group + "] " : "") + (pr.purpose || ""));
+      right.append(line);
+    }
+  }
+
+  const into = rootsForFile(p);
+  right.append(el("h3", "", "Built into (" + into.length + ")"));
+  if (!into.length) right.append(el("div", "empty", "Nothing this build makes."));
+  else {
+    right.append(list(into, (r) => [go(r)]));
+    const shown = 30;
+    const chains = chainsFor(p, shown + 1);
+    right.append(el("h3", "", "How"));
+    for (const c of chains.slice(0, shown)) {
+      const line = el("div", "chain");
+      c.forEach((step, i) => {
+        if (i) line.append(el("span", "sep", "→"));
+        line.append(go(step, i === 0 ? objectText(step) : step));
+      });
+      right.append(line);
+    }
+    if (chains.length > shown) right.append(el("p", "hint", "… more ways; the outputs above are complete."));
+  }
+
+  const own = (users.get(p) || []).filter((o) => objects[o].source === p);
+  if (kindOf(p) === "object") own.push(p);
+  for (const o of own) {
+    const info = objects[o];
+    right.append(el("h3", "", "Object " + base(o)));
+    const facts = [["object", go(o)]];
+    if (info.source) facts.push(["source", go(info.source)]);
+    if (info.include_dirs.length) facts.push(["include dirs", info.include_dirs.join("  ")]);
+    right.append(list(facts, ([k, v]) => [k + ": ", v]));
+    if (info.headers.length) {
+      right.append(el("h3", "", "Headers it reads (" + info.headers.length + ")"));
+      right.append(list(info.headers, (h) => probesOf(h).length ? [go(h), " ", probeChip(probesOf(h))] : [go(h)]));
+    }
+  }
+  if (headerUsers.has(p)) {
+    const readers = headerUsers.get(p);
+    right.append(el("h3", "", "Read by (" + readers.length + ")"));
+    right.append(list(readers, (o) => [go(objects[o].source || o)]));
+  }
+  const kids = childrenOf(p);
+  if (kids.length) {
+    right.append(el("h3", "", "Made from (" + kids.length + ")"));
+    right.append(list(kids, (c) => [go(objects[c] && objects[c].source ? objects[c].source : c, objectText(c))]));
+    const libs = (outs[p] && outs[p].libs) || [];
+    if (libs.length) {
+      right.append(el("p", "hint", "Also linked, not made by this build: "
+        + libs.map((l) => "-l" + l).join(" ")));
+    }
+  }
+}
+
+// Picking a file only changes the marks and the right side; the tree is not redrawn.
+function select(path) {
+  state.selected = path;
+  document.querySelectorAll("#left .selected").forEach((e) => e.classList.remove("selected"));
+  document.querySelectorAll("#left [data-path]").forEach((e) => {
+    if (e.dataset.path === path || e.dataset.src === path) e.classList.add("selected");
+  });
+  renderDetails();
+  writeHash();
+}
+
+// ---- wiring ------------------------------------------------------------------
+function render() {
+  let M = null;
+  const q = $("q");
+  q.classList.remove("bad");
+  q.title = "";
+  try { M = makeMatcher(state.q.trim(), state.regex); }
+  catch (e) { q.classList.add("bad"); q.title = String(e.message || e); }
+  $("tab-tree").setAttribute("aria-selected", String(state.view === "tree"));
+  $("tab-headers").setAttribute("aria-selected", String(state.view === "headers"));
+  for (const id of ["o-sources", "o-headers"]) $(id).parentElement.hidden = state.view !== "tree";
+  $("expand").hidden = $("collapse").hidden = state.view !== "tree";
+  if (state.view === "tree") renderTree(M); else renderHeaders(M);
+  renderDetails();
+  writeHash();
+}
+
+// The search, view and picked file live in the address (#q=ring&file=util/ring.h),
+// so a view can be bookmarked or opened again as it was.
+function writeHash() {
+  const h = new URLSearchParams();
+  if (state.view !== "tree") h.set("view", state.view);
+  if (state.q) h.set("q", state.q);
+  if (state.selected) h.set("file", state.selected);
+  const text = h.toString();
+  try { history.replaceState(null, "", text ? "#" + text : location.pathname); }
+  catch (e) { /* some browsers refuse this for local files */ }
+}
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.has("view")) state.view = h.get("view") === "headers" ? "headers" : "tree";
+  state.q = h.get("q") || "";
+  state.selected = h.get("file") || null;
+  $("q").value = state.q;
+}
+window.addEventListener("hashchange", () => { readHash(); render(); });
+
+$("title").textContent = D.name + " — build dependencies";
+$("meta").textContent = [
+  finals.length + " outputs", Object.keys(archives).length + " archives",
+  Object.keys(objects).length + " objects", headerUsers.size + " headers",
+  "made " + (D.generated || "?") + " from " + (D.command || "?"),
+].join(" · ");
+if (D.headers_traced === false) {
+  const s = el("div", "warn", "Headers are not followed (deps.headers: false), so this "
+    + "shows sources only and cannot say what a header change rebuilds.");
+  $("stale").before(s);
+}
+if (D.stale.length) {
+  const s = $("stale");
+  s.hidden = false;
+  s.textContent = "Changed since this was made: " + D.stale.slice(0, 5).join(", ")
+    + (D.stale.length > 5 ? " …" : "") + ". Run psect deps html again for a fresh view.";
+}
+for (const [id, key] of [["o-regex", "regex"], ["o-sources", "sources"],
+  ["o-headers", "headers"], ["o-probed", "probed"]]) {
+  const box = $(id);
+  box.checked = state[key];
+  box.addEventListener("change", () => { state[key] = box.checked; remember(); render(); });
+}
+let timer = 0;
+$("q").addEventListener("input", (ev) => {
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    state.q = ev.target.value;
+    state.opened.clear(); state.closed.clear(); state.fold = "auto";
+    render();
+  }, 150);
+});
+$("tab-tree").addEventListener("click", () => { state.view = "tree"; remember(); render(); });
+$("tab-headers").addEventListener("click", () => { state.view = "headers"; remember(); render(); });
+$("expand").addEventListener("click", () => {
+  state.opened.clear(); state.closed.clear(); state.fold = "all"; render();
+});
+$("collapse").addEventListener("click", () => {
+  state.opened.clear(); state.closed.clear(); state.fold = "none"; render();
+});
+document.addEventListener("keydown", (ev) => {
+  const q = $("q");
+  if (ev.key === "/" && document.activeElement !== q) { ev.preventDefault(); q.focus(); q.select(); }
+  else if (ev.key === "Escape" && document.activeElement === q) {
+    q.value = ""; state.q = ""; render();
+  }
+});
+readHash();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Same line endings on every OS: LF in the repository and in checkouts.
+* text=auto eol=lf
+*.png binary

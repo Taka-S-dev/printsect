@@ -1,0 +1,96 @@
+# printsect の設定（このプロジェクトに関わる全員で共有）。
+# PC ごとの設定（ポート、パス、その PC の道具）は printsect.local.yaml に書きます。
+# そちらはこのファイルの上に重ねて読まれ、コミットしません。
+#
+# 上から順に埋め、そのたびに `psect doctor` を実行してください。各部分を実際に試し
+# （ビルドも対象機器への操作もせずに）、次にやることを表示します。
+# `psect check` は、書き間違えた項目や型の違う項目を示します。
+#
+# 下の名前（app/、netdrv、app_start など）はすべて架空の例です。
+
+version: 1
+lang: ja                            # 手順書とこのひな形の言語（en / ja）
+
+marker:
+  # 各プローブ行の末尾に付く目印：/* PSECT-AI:group #7 */
+  prefix: PSECT
+
+probe:
+  # 出力の中身を指定しなかったときにプローブが出力するもの。
+  # {tag} -> "PSECT-AI 7 group"、{n} -> 7、{where} -> "file.c:61"
+  template: 'printf("[{tag}] %s:%d\n", __FILE__, __LINE__);'
+  encodings: [utf-8, cp932]
+
+# 1. ビルドの読み方（psect deps）。何もビルドしません：make は表示するだけです（-n）。
+deps:
+  command: make -n -B -w          # 普段使う -f / -C / ターゲットを足す
+  cwd: .                          # そのコマンドを実行する場所
+  headers: true                   # #include をたどる（ヘッダにプローブを入れるなら必要）
+
+# 2. 出力の作り方と、対象機器に載せるもの。ルールは、プローブを入れたファイルを含む
+#    アーカイブと出力ごとに埋められ、書いた順に実行されます。`for` のない手順は、
+#    その位置で一度だけ実行されます（忘れてはいけないクリーンなど）。
+#    `psect build --plan` は、コマンドを実行せずに表示します。
+#    ルールの中では：{made_in} ビルドが作ったフォルダ、{name} libnet.a、
+#    {path} build/lib/libnet.a、{module} net、{dir} build/lib、{run} 実行の番号。
+#    出力を作るとアーカイブも作り直される（make ならたいていそう）なら、outs の
+#    ルールだけで足ります。各コマンドは、まず make -n で手で試してください。
+#    `psect build --plan --all` は、全ソースにプローブがあるとした場合の計画を表示します。
+# build:
+#   steps:
+#     - run: make clean
+#     - for: archives
+#       run: make -C {made_in}
+#     - for: outs
+#       run: make {path}               # {path}：ビルドが付けた名前のまま（make のターゲット）
+#   artifacts: auto               # プローブを入れたファイルを含む出力。または一覧
+#   artifact_path: out/{device}/{name}   # 転送する出力を取ってくる場所
+#   check_outputs: true           # ビルドが出力を作り直さなかったら止める
+#   # command: make {outs}        # 手順の代わりに 1 つのコマンドでもよい
+
+# 3. 起動の目印を入れる場所：新しいビルドが起動時に一度だけ必ず実行する行（初期化関数）の
+#    下に入れ、新しいビルドの出力を古いものと区別します。
+#    ready：目印が出たあと、再現の手順の前に、この行（プロンプト）が出るまで待ちます。
+# run:
+#   banner: app/init.c:42         # FILE:LINE（このフォルダからの相対パス）
+#   ready: "^> "                 # 正規表現
+#   ready_timeout: 120
+
+# 4. ビルドを対象機器に載せる方法。
+# deploy:
+#   type: manual                  # 人が自分の道具で転送する
+#   message: "{artifact_name} を対象機器に読み込んでください"
+#   # type: command               # またはこの PC で実行するコマンド：
+#   # commands: ["mytool put {artifact} /target/"]
+# deploy:                         # または FTP サーバーが動く対象機器：
+#   type: ftp
+#   host: 192.168.0.10
+#   user: target                  # パスワード：人が PSECT_FTP_PASSWORD を設定する
+#   path: "/tmp/{artifact_name}"  # 対象機器でファイルを置く場所
+#   after: ["load /tmp/{artifact_name}"]   # そのあとコンソールに打って読み込む
+
+# 5. コンソール：printsect.local.yaml に書きます（PC によって違うため）。
+
+# 6. 新しいビルドが動いたあと、問題を起こす手順。
+# reproduce:
+#   - send: app_start             # 対象機器へのコマンド（送信できるコンソールが必要）
+#   - wait: "ready"               # 待つ行
+#   - ask: ケーブルを抜いてください   # 人がする手順。psect run --resume で続ける
+#   - sleep: 2
+
+# 7. コンソールを読むのをやめる条件。
+# stop:
+#   match: ["Exception", "assert"]
+#   quiet: 5                      # 出力がない秒数
+#   timeout: 120
+
+# 8. 機器：対象機器によって違いがある（出力の置き場所、読み込み方など）とき、
+#    機器ごとに名前を付け、違う部分だけを書きます。それ以外の設定の上に重ねられます。
+#    `psect use NAME` でこのプロジェクトで使う機器を選びます。複数あるのにどれも
+#    選んでいなければ、ビルドと転送は推測せずに止まります。{device} はその名前です。
+# devices:
+#   board-a:
+#     build: {artifact_path: "out/a/{name}"}
+#   board-b:
+#     build: {artifact_path: "out/b/{name}"}
+#     deploy: {type: manual, message: "{artifact_name} を B 用のローダーで読み込んでください"}
