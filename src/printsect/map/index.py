@@ -89,7 +89,8 @@ class ScanIndexer:
                 if _CONTROL.search(entry.name):  # it would reach terminals and agents
                     index.unreadable += 1
                 elif is_link(info):
-                    if stat.S_ISDIR(info.st_mode) or rel.lower().endswith(self.extensions):
+                    # What it leads to is not looked at, so a folder is told by its name.
+                    if "." not in entry.name or rel.lower().endswith(self.extensions):
                         index.links += 1
                 elif stat.S_ISDIR(info.st_mode):
                     if not entry.name.startswith(".") and not self._excluded(rel):
