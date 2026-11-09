@@ -10,11 +10,13 @@ import pytest
 
 from printsect.cli import main
 from printsect.core.errors import PsectError
-from printsect.deps import load, make_scanner, save
 from printsect.deps import cli as cli_module
+from printsect.deps import load, make_scanner, save
 from printsect.deps import make as make_module
+from printsect.deps import public as public_module
 from printsect.deps.graph import Graph
 from printsect.deps.makelog import split_commands
+from printsect.deps.public import Masker, leaks
 from printsect.deps.search import Matcher
 from printsect.deps.tree import TreeOptions, build_tree, render_tree
 from printsect.probe.ops import add
@@ -335,7 +337,17 @@ def test_impact_goes_from_a_header_to_every_output(scanned, capsys):
     assert out["status"] == "inferred"
 
 
-@pytest.mark.parametrize("name", [r"\\server\share\a.c", "//server/share/a.c", r"\\?\C:\a.c"])
+def test_an_absolute_path_inside_the_project_is_found_without_being_opened(scanned, capsys):
+    p, _ = scanned
+    capsys.readouterr()
+    full = str(p.root / "src" / "net" / "rx.c")
+    assert main(["deps", "impact", full, "--json", "--root", str(p.root)]) == 0
+    assert json.loads(capsys.readouterr().out)["file"] == "src/net/rx.c"
+
+
+@pytest.mark.parametrize("name", [r"\\server\share\a.c", "//server/share/a.c", r"\\?\C:\a.c",
+                                  r"\??\UNC\server\share\a.c", r"\Device\Mup\server\a.c",
+                                  "C:relative.c"])
 @pytest.mark.parametrize("action", ["impact", "which"])
 def test_a_network_path_is_only_looked_up_never_opened(scanned, capsys, monkeypatch, name, action):
     p, _ = scanned
@@ -519,6 +531,84 @@ def test_the_page_says_how_sure_each_part_is_and_has_every_view(scanned):
     for name in ("tab-graph", "tab-status", "tab-modules", "g-layout", "xpng", "mini"):
         assert name in page
     assert "__GRAPH_JS__" not in page
+
+
+def public_page(p, capsys, *extra):
+    out = p.root / ".printsect" / "deps.public.html"
+    capsys.readouterr()
+    code = main(["deps", "html", "--public", "--no-open", "--json", *extra, "--root", str(p.root)])
+    text = capsys.readouterr()
+    return code, (out.read_text(encoding="utf-8") if code == 0 else ""), text
+
+
+def page_data(page):
+    return page[page.index('id="data">') + 10:page.index("</script>", page.index('id="data">'))]
+
+
+def test_a_public_copy_masks_names_and_leaves_out_commands_and_notes(project, capsys):
+    p = project(FILES, config="public:\n  mask: [netdrv, DISK]\n")
+    log = LOG.format(root=p.root.as_posix())
+    save(p, make_scanner(p.settings["deps"]).scan(p, log=log))
+    add(p, "src/net/rx.c", 3, purpose="secret plan", group="g")
+    code, page, text = public_page(p, capsys)
+    assert code == 0, text.err
+    data = page_data(page)
+    answer = json.loads(text.out)["masked"]
+    assert answer["names"] > 0
+    for gone in ("netdrv", "disk", "secret plan", "xcc", "make -n"):
+        assert gone not in data.lower()
+    assert "src/net/rx.c" in data and "Public copy" in page
+    assert (p.state_dir / "deps.public.html").is_file()
+
+
+def test_a_public_copy_can_hide_every_file_name(scanned, capsys):
+    p, _ = scanned
+    code, page, _ = public_page(p, capsys, "--hide-sources")
+    assert code == 0
+    data = page_data(page)
+    assert "rx.c" not in data and "net.h" not in data and "file-1" in data
+
+
+def test_a_public_copy_replaces_an_absolute_path(project, capsys):
+    p = project(FILES)
+    g = Graph(objects={"o/a.o": {"source": "/opt/vendor/a.c"}},
+              outs={"a.out": {"objects": ["o/a.o"]}})
+    save(p, g)
+    code, page, _ = public_page(p, capsys)
+    assert code == 0 and "/opt/vendor" not in page_data(page) and "(outside)/a.c" in page_data(page)
+
+
+@pytest.mark.parametrize(("text", "said"), [
+    ('{"a": "C:/Users/me/x.c"}', "absolute paths: 1"),
+    ('{"a": "password=hunter2"}', "password or key: 1"),
+    ('{"a": "acme board"}', "names to mask: 1"),
+])
+def test_what_would_still_go_out_is_found_without_being_repeated(text, said):
+    found = leaks(text, ["acme"], "")
+    assert any(said in f for f in found)
+    assert "hunter2" not in " ".join(found) and "Users" not in " ".join(found)
+
+
+def test_a_public_copy_stops_when_the_check_finds_something(project, capsys, monkeypatch):
+    p = project(FILES)
+    save(p, Graph(objects={"a.o": {"source": "a.c"}}))
+    monkeypatch.setattr(public_module, "leaks", lambda *args: ["absolute paths: 1"])
+    code, _, text = public_page(p, capsys)
+    assert code == 1 and "not written" in text.out
+    assert not (p.state_dir / "deps.public.html").exists()
+
+
+def test_the_page_says_when_it_is_written_inside_the_project(scanned, capsys):
+    p, _ = scanned
+    capsys.readouterr()
+    page = str(p.root / "x.html")
+    assert main(["deps", "html", "--no-open", "-o", page, "--root", str(p.root)]) == 0
+    assert "keep it out of version control" in capsys.readouterr().err
+
+
+def test_a_mask_name_must_be_text():
+    with pytest.raises(PsectError, match="public.mask"):
+        Masker([3], False)
 
 
 def test_cli_deps_html_writes_the_page(scanned, capsys):

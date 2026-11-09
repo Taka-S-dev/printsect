@@ -15,9 +15,10 @@ Another tool can do that too: `configure(parser, marks=...)` takes a function gi
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .. import __version__
@@ -27,10 +28,20 @@ from ..core.errors import PsectError
 from .graph import Graph
 
 Marks = Callable[[Project], dict[str, list[dict[str, Any]]]]
+MapData = Callable[[Project], "dict[str, Any] | None"]
+MaskNames = Callable[[Project], list[str]]
 
 
 def no_marks(project: Project) -> dict[str, list[dict[str, Any]]]:
     return {}
+
+
+def no_map(project: Project) -> dict[str, Any] | None:
+    return None
+
+
+def no_names(project: Project) -> list[str]:
+    return []
 
 
 def _load(args: argparse.Namespace, proj: Project) -> Graph:
@@ -51,10 +62,19 @@ def _load(args: argparse.Namespace, proj: Project) -> Graph:
 
 def _file_arg(proj: Project, name: str) -> str:
     """A path as typed (from the current folder) or as the graph keeps it."""
-    if name.replace("\\", "/").startswith("//"):
-        # Only a name to look up: asking whether it exists would contact that server,
-        # which hands it this PC's login, and an agent can pass this value.
-        return name.replace("\\", "/")
+    text = name.replace("\\", "/")
+    if PureWindowsPath(name).anchor or text.startswith("/"):
+        # Not a plain relative path, so it is only compared as text: asking whether a
+        # network or device path exists would contact that server, which hands it this
+        # PC's login, and an agent can pass this value.
+        if not text.startswith(("//", "/?")):
+            try:
+                inside = os.path.relpath(os.path.normpath(name), proj.root)
+                if not inside.startswith(".."):
+                    return inside.replace("\\", "/")
+            except ValueError:  # another drive
+                pass
+        return text
     path = Path(name)
     if path.exists():
         try:
@@ -209,26 +229,66 @@ def cmd_html(args: argparse.Namespace) -> int:
 
     proj = project(args)
     graph = _load(args, proj)
-    page = render_html(graph, args.deps_marks(proj), name=proj.root.name,
-                       stale=graph.stale_inputs(proj.root))
+    if args.public:
+        page, report = _public_page(args, proj, graph)
+    else:
+        report = None
+        page = render_html(graph, args.deps_marks(proj), name=proj.root.name,
+                           stale=graph.stale_inputs(proj.root), map_data=args.deps_map(proj))
     if args.out:
         path = Path(args.out).resolve()
     else:
         ensure_state_dir(proj.state_dir)
-        path = proj.state_dir / "deps.html"
+        path = proj.state_dir / ("deps.public.html" if args.public else "deps.html")
     write_atomic(path, page)
+    if path.is_relative_to(proj.root) and not path.is_relative_to(proj.state_dir):
+        print(f"note: {path.name} is inside the project: keep it out of version control",
+              file=sys.stderr)
     opened = False
     if not args.no_open and not args.json and sys.stdout.isatty():
         import webbrowser
 
         opened = webbrowser.open(path.as_uri())
-    out(args, {"file": str(path), "opened": opened},
-        f"wrote {path}" + (" (opened in the browser)" if opened else ""))
+    said = f"wrote {path}" + (" (opened in the browser)" if opened else "")
+    if report:
+        said += ("\nmasked: {names} name(s), {absolute_paths} absolute path(s), "
+                 "{files_hidden} file name(s) hidden; commands, probe notes and reasons "
+                 "left out").format(**report)
+    out(args, {"file": str(path), "opened": opened, "masked": report}, said)
     return 0
 
 
+def _public_page(args: argparse.Namespace, proj: Project,
+                 graph: Graph) -> tuple[str, dict[str, int]]:
+    """The page with the names taken out, or an error if something would still go out."""
+    from .html import embedded, page_data, render_data
+    from .public import Masker, leaks, mask_graph, mask_map
+
+    settings = proj.settings.get("public") or {}
+    names = [*(settings.get("mask") or []), *args.deps_mask_names(proj), proj.root.name]
+    masker = Masker(names, bool(args.hide_sources or settings.get("hide_sources")))
+    masked = mask_graph(graph, masker)
+    probes = {masker.file(f): [{"n": m.get("n")} for m in ms]
+              for f, ms in args.deps_marks(proj).items()}
+    map_data = args.deps_map(proj)
+    report = {}
+    data = page_data(masked, probes, name="project",
+                     map_data=mask_map(map_data, masker) if map_data else None,
+                     public="placeholder")
+    report = masker.report()
+    data["public"] = (f"{report['names']} names masked, {report['absolute_paths']} absolute "
+                      f"paths replaced, {report['files_hidden']} file names hidden; commands "
+                      "and notes left out.")
+    found = leaks(embedded(data), masker.names, proj.root.as_posix())
+    if found:
+        raise PsectError("not written: this would still go out: " + "; ".join(found)
+                         + ". Add what is wrong to public.mask, or use --hide-sources")
+    return render_data(data, "project"), report
+
+
 def configure(parser: argparse.ArgumentParser, *, marks: Marks | None = None,
-              name: str = "psect-deps") -> None:
+              name: str = "psect-deps", map_data: MapData | None = None,
+              mask_names: MaskNames | None = None) -> None:
     """Add the deps options and actions to `parser` (which already has --json/--root)."""
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--from-log", metavar="FILE",
@@ -239,6 +299,7 @@ def configure(parser: argparse.ArgumentParser, *, marks: Marks | None = None,
     from . import SECTIONS
 
     parser.set_defaults(func=cmd_scan, deps_marks=marks or no_marks, deps_name=name,
+                        deps_map=map_data or no_map, deps_mask_names=mask_names or no_names,
                         sections=SECTIONS)
     below = common_below()
     below.add_argument("--ascii", action="store_true", default=argparse.SUPPRESS,
@@ -277,6 +338,10 @@ def configure(parser: argparse.ArgumentParser, *, marks: Marks | None = None,
     p.add_argument("--out", "-o", metavar="FILE",
                    help="where to write (default .printsect/deps.html)")
     p.add_argument("--no-open", action="store_true", help="write the page but do not open it")
+    p.add_argument("--public", action="store_true",
+                   help="a copy to hand on: names masked (public.mask), then checked")
+    p.add_argument("--hide-sources", action="store_true",
+                   help="with --public, file names go too, and symbols")
     p.set_defaults(func=cmd_html)
 
 

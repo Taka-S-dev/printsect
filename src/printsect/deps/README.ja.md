@@ -77,13 +77,27 @@ deps:
 この PC で make を動かせない（メーカーの道具のシェルの中だけ）ときは、そこで出力を保存してファイルを
 読ませます：`make -n -B -w > make.log` のあと、`psect-deps --from-log make.log`。
 
+## 人に渡すコピー
+
+`psect-deps html --public` は、指定した名前を伏せ、絶対パスを `(outside)/name` に置き換え、コマンド、プローブのメモ、理由を外します。
+`--hide-sources` を付けると、ソース、ヘッダ、オブジェクトの名前とシンボルもすべて置き換えます。伏せられるのは指定したものだけなので、
+そのあとページの内容を、絶対パス、パスワードや鍵らしいもの、伏せる名前、このプロジェクトのフォルダについて検査します。残っていれば何も書かず、
+どの種類がいくつあるかをエラーで示します。何を伏せたかは、コマンドの出力とページに示します。
+
+```yaml
+public:                    # 実際の名前は printsect.local.yaml に
+  mask: [acme, modelx]
+  hide_sources: false
+```
+
 ## 書くファイル
 
 | ファイル | 用途 |
 |---|---|
 | `.printsect/deps.json` | グラフ：`outs`、`archives`、`objects`（それぞれ `source`、`headers` 付き） |
 | `.printsect/DEPS.md` | ツリーと、ヘッダごとの出力。エディタで読む用 |
-| `.printsect/deps.html` | `psect-deps html` のページ。プロジェクトからの相対パスだけを持ち、何も取りに行かず、人に渡しても安全 |
+| `.printsect/deps.html` | `psect-deps html` のページ。プロジェクトからの相対パスだけを持ち、何も取りに行きません。ただしファイル名、コマンド、メモは含みます |
+| `.printsect/deps.public.html` | `psect-deps html --public` のページ。人に渡すためのもの |
 
 ## ほかのビルド方式
 
@@ -131,3 +145,4 @@ make では表せないビルド（ターゲットの一覧、コンパイラを
 | `tree.py` | ツリーと `which` を文字で表す |
 | `markdown.py` | `DEPS.md` |
 | `html.py`, `viewer.html`, `viewer_graph.js` | ブラウザのページ、そのテンプレート、グラフの描画 |
+| `public.py` | 人に渡すコピー：名前を伏せることと、外に出るものの検査 |

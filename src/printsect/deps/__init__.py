@@ -20,7 +20,8 @@ from .markdown import render_markdown
 
 # The sections of printsect.yaml this tool reads. Its own keys are checked by the
 # reader picked with deps.type, which may be a plugin with keys of its own.
-SECTIONS: Schema = {"deps": {"type": str}}
+SECTIONS: Schema = {"deps": {"type": str},
+                    "public": {"mask": list, "hide_sources": bool}}
 
 DEPS_FILE = "deps.json"
 DEPS_MD = "DEPS.md"

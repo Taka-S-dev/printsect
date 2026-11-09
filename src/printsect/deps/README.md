@@ -85,13 +85,29 @@ deps:
 Where make cannot run here (only inside a vendor tool's shell), save its output
 there and read the file: `make -n -B -w > make.log`, then `psect-deps --from-log make.log`.
 
+## A copy to hand on
+
+`psect-deps html --public` masks the names you list, turns absolute paths into `(outside)/name`,
+and leaves out commands, probe notes and reasons. `--hide-sources` also replaces every source,
+header and object name, and symbols. Masking only knows what it is told, so the page is then
+checked for absolute paths, anything like a password or key, the names to mask and this
+project's folder; if any remains, nothing is written and the error says which kinds and how
+many. It says what it masked, here and on the page.
+
+```yaml
+public:                    # keep real names in printsect.local.yaml
+  mask: [acme, modelx]
+  hide_sources: false
+```
+
 ## Files it writes
 
 | File | For |
 |---|---|
 | `.printsect/deps.json` | The graph: `outs`, `archives`, `objects` (each with `source`, `headers`) |
 | `.printsect/DEPS.md` | The tree and each header's outputs, to read in an editor |
-| `.printsect/deps.html` | The page from `psect-deps html`. Holds paths relative to the project only, fetches nothing, safe to hand on |
+| `.printsect/deps.html` | The page from `psect-deps html`. Holds paths relative to the project only and fetches nothing, but names your files, commands and notes |
+| `.printsect/deps.public.html` | The page from `psect-deps html --public`, made to hand on |
 
 ## Other build systems
 
@@ -143,3 +159,4 @@ without it the reader checks its own.
 | `tree.py` | The tree and `which` as text |
 | `markdown.py` | `DEPS.md` |
 | `html.py`, `viewer.html`, `viewer_graph.js` | The browser page, its template and its graph |
+| `public.py` | A copy to hand on: masking, and checking what would go out |
