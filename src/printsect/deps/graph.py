@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 GRAPH_VERSION = 1
+IMPORTED = "(a graph file)"  # Graph.command when it came from --from-graph, not a command
 
 OUT = "out"
 ARCHIVE = "archive"

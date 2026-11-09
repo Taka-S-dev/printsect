@@ -59,16 +59,28 @@ def _file_arg(proj: Project, name: str) -> str:
     return name.replace("\\", "/")
 
 
+def _graph_text(name: str) -> str:
+    try:
+        data = sys.stdin.buffer.read() if name == "-" else Path(name).read_bytes()
+        return data.decode("utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PsectError(f"cannot read the graph file {name}: {exc}") from exc
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     from . import DEPS_FILE, DEPS_MD, make_scanner, save
+    from .imported import read_graph
 
     proj = project(args)
-    log = None
-    if args.from_log == "-":
-        log = sys.stdin.read()
-    elif args.from_log:
-        log = Path(args.from_log).read_text(encoding="utf-8", errors="replace")
-    graph = make_scanner(proj.settings.get("deps")).scan(proj, log=log)
+    if args.from_graph:
+        graph = read_graph(_graph_text(args.from_graph), proj)
+    else:
+        log = None
+        if args.from_log == "-":
+            log = sys.stdin.read()
+        elif args.from_log:
+            log = Path(args.from_log).read_text(encoding="utf-8", errors="replace")
+        graph = make_scanner(proj.settings.get("deps")).scan(proj, log=log)
     save(proj, graph)
     summary = {
         "outs": len(graph.final_outs()),
@@ -192,8 +204,11 @@ def cmd_html(args: argparse.Namespace) -> int:
 def configure(parser: argparse.ArgumentParser, *, marks: Marks | None = None,
               name: str = "psect-deps") -> None:
     """Add the deps options and actions to `parser` (which already has --json/--root)."""
-    parser.add_argument("--from-log", metavar="FILE",
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--from-log", metavar="FILE",
                         help="read saved `make -n` output instead of running make (- = stdin)")
+    source.add_argument("--from-graph", metavar="FILE",
+                        help="read a graph your own tool wrote, running nothing (- = stdin)")
     parser.add_argument("--ascii", action="store_true", help=argparse.SUPPRESS)
     from . import SECTIONS
 

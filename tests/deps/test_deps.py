@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
+import os
 import shutil
 import subprocess
 
 import pytest
 
 from printsect.cli import main
+from printsect.core.errors import PsectError
 from printsect.deps import load, make_scanner, save
 from printsect.deps import make as make_module
 from printsect.deps.graph import Graph
@@ -14,6 +17,8 @@ from printsect.deps.makelog import split_commands
 from printsect.deps.search import Matcher
 from printsect.deps.tree import TreeOptions, build_tree, render_tree
 from printsect.probe.ops import add
+from printsect.suite.build import load_graph
+from printsect.suite.doctor import _deps as doctor_deps
 
 FILES = {
     "src/inc/com.h": b"#pragma once\n",
@@ -206,6 +211,132 @@ def test_a_question_does_not_read_the_build_by_itself(project, capsys, monkeypat
     assert main(["deps", *question, "--root", str(p.root)]) == 1
     assert "run psect deps first" in capsys.readouterr().err
     assert not (p.root / ".printsect" / "deps.json").exists()
+
+
+GRAPH = {
+    "version": 1,
+    "objects": {"o/rx.o": {"source": "src/net/rx.c", "headers": ["src/inc/net.h"]},
+                "o/crt.o": {"source": None}},
+    "archives": {"lib/net.a": {"objects": ["o/rx.o"], "made_in": "src/net"},
+                 "lib/vendor.a": {"objects": [], "prebuilt": True}},
+    "outs": {"out/app.out": {"objects": ["o/crt.o"], "archives": ["lib/net.a", "lib/vendor.a"],
+                             "libs": ["m"]}},
+}
+
+
+def from_graph(p, tmp_path, graph):
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(graph), encoding="utf-8")
+    return main(["deps", "--from-graph", str(path), "--root", str(p.root)])
+
+
+def test_a_graph_file_is_read_without_running_anything(project, capsys, tmp_path, monkeypatch):
+    def ran(*args, **kwargs):
+        raise AssertionError("a command ran")
+
+    monkeypatch.setattr(make_module.subprocess, "run", ran)
+    p = project(FILES)
+    assert from_graph(p, tmp_path, GRAPH) == 0
+    g = load(p)
+    assert g.final_outs() == ["out/app.out"]
+    assert g.command == "(a graph file)" and g.headers_traced
+    assert g.archives["lib/net.a"]["made_in"] == "src/net"
+    assert {r["root"] for r in g.which("src/inc/net.h")} == {"out/app.out"}
+    assert main(["deps", "tree", "--root", str(p.root)]) == 0
+
+
+def test_a_graph_file_gives_the_map_its_archives(project, capsys, tmp_path):
+    p = project(FILES)
+    assert from_graph(p, tmp_path, GRAPH) == 0
+    capsys.readouterr()
+    assert main(["map", "--json", "--root", str(p.root)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["grouped_by"] == "archive" and out["files"] == 1
+
+
+def test_a_graph_file_comes_from_stdin_and_may_start_with_a_bom(project, monkeypatch):
+    p = project(FILES)
+    raw = b"\xef\xbb\xbf" + json.dumps(GRAPH).encode("utf-8")
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(raw)))
+    assert main(["deps", "--from-graph", "-", "--root", str(p.root)]) == 0
+    assert load(p).final_outs() == ["out/app.out"]
+
+
+def test_a_graph_file_without_headers_says_they_are_unknown(project, tmp_path):
+    p = project(FILES)
+    assert from_graph(p, tmp_path, {"objects": {"o/a.o": {"source": "a.c"}}}) == 0
+    assert not load(p).headers_traced
+
+
+@pytest.mark.parametrize(("graph", "said"), [
+    ([], "expected an object"),
+    ({"objects": {}, "extra": 1}, "unknown field 'extra'"),
+    ({"version": 2}, "version 2"),
+    ({"objects": []}, "expected an object keyed by path"),
+    ({"objects": {"/abs/a.o": {}}}, "not a path inside"),
+    ({"objects": {"C:/a.o": {}}}, "not a path inside"),
+    ({"objects": {"//server/share/a.o": {}}}, "not a path inside"),
+    ({"objects": {"../a.o": {}}}, "not a path inside"),
+    ({"objects": {"a/../../b.o": {}}}, "not a path inside"),
+    ({"objects": {"a\x1b[2J.o": {}}}, "not a path inside"),
+    ({"objects": {"a.o": {"source": 3}}}, "not a path inside"),
+    ({"objects": {"a.o": {"flags": []}}}, "unknown field 'flags'"),
+    ({"objects": {"a.o": {"headers": "x.h"}}}, "expected a list"),
+    ({"archives": {"l.a": {"objects": ["no.o"]}}}, "which is not listed"),
+    ({"archives": {"l.a": {"objects": [], "prebuilt": "yes"}}}, "true or false"),
+    ({"outs": {"a.out": {"archives": ["a.out"]}}}, "built from itself"),
+    ({"outs": {"a.out": {"objects": ["b.out"]}, "b.out": {"objects": ["a.out"]}}},
+     "built from itself"),
+    ({"inputs": ["missing.csv"]}, "cannot read missing.csv"),
+])
+def test_a_graph_file_that_is_wrong_stops_and_says_where(project, capsys, tmp_path, graph, said):
+    p = project(FILES)
+    assert from_graph(p, tmp_path, graph) == 1
+    assert said in capsys.readouterr().err
+    assert not (p.root / ".printsect" / "deps.json").exists()
+
+
+def test_a_graph_file_that_is_not_json_or_not_there(project, capsys, tmp_path):
+    p = project(FILES)
+    (tmp_path / "bad.json").write_bytes(b"{")
+    assert main(["deps", "--from-graph", str(tmp_path / "bad.json"), "--root", str(p.root)]) == 1
+    assert "not JSON" in capsys.readouterr().err
+    assert main(["deps", "--from-graph", str(tmp_path / "no.json"), "--root", str(p.root)]) == 1
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_from_log_and_from_graph_cannot_be_given_together():
+    with pytest.raises(SystemExit):
+        main(["deps", "--from-log", "a", "--from-graph", "b"])
+
+
+def test_a_changed_input_of_a_graph_file_stops_the_build_instead_of_running_make(
+        project, tmp_path, monkeypatch):
+    def ran(*args, **kwargs):
+        raise AssertionError("a command ran")
+
+    monkeypatch.setattr(make_module.subprocess, "run", ran)
+    p = project({**FILES, "targets.csv": b"a\n"})
+    assert from_graph(p, tmp_path, {**GRAPH, "inputs": ["targets.csv"]}) == 0
+    assert load_graph(p, lambda text: None).command == "(a graph file)"
+    os.utime(p.root / "targets.csv", ns=(1, 1))
+    with pytest.raises(PsectError, match="--from-graph"):
+        load_graph(p, lambda text: None)
+
+
+def test_doctor_keeps_a_graph_file_and_says_when_it_is_stale(project, tmp_path, monkeypatch):
+    def ran(*args, **kwargs):
+        raise AssertionError("a command ran")
+
+    monkeypatch.setattr(make_module.subprocess, "run", ran)
+    p = project({**FILES, "targets.csv": b"a\n"})
+    assert from_graph(p, tmp_path, {**GRAPH, "inputs": ["targets.csv"]}) == 0
+    finding, graph = doctor_deps(p)
+    assert finding.status == "ok" and graph.command == "(a graph file)"
+    os.utime(p.root / "targets.csv", ns=(1, 1))
+    finding, _ = doctor_deps(p)
+    assert finding.status == "warn" and "targets.csv" in finding.message
+    assert load(p).command == "(a graph file)"
 
 
 def test_failing_build_command_is_reported(project, capsys):

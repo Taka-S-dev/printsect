@@ -120,11 +120,36 @@ def _settings(project: Project) -> Finding:
     return Finding("settings", OK, "printsect.yaml and printsect.local.yaml read without errors")
 
 
+def _imported(project: Project) -> tuple[Finding, Any] | None:
+    """A build read from a graph file is checked as it is: make cannot read it again, and
+    trying would replace it."""
+    from ..deps import load
+    from ..deps.graph import IMPORTED
+
+    if not project.state_file("deps.json").is_file():
+        return None
+    try:
+        graph = load(project)
+    except PsectError:
+        return None
+    if graph.command != IMPORTED:
+        return None
+    changed = graph.stale_inputs(project.root)
+    if changed:
+        return Finding("deps", WARN, f"{', '.join(changed[:3])} changed since the graph file "
+                       "was read", "write it again, then psect deps --from-graph FILE"), graph
+    return Finding("deps", OK, f"read from a graph file: {len(graph.final_outs())} output(s), "
+                   f"{len(graph.archives)} archive(s), {len(graph.objects)} object(s)"), graph
+
+
 def _deps(project: Project, run_commands: bool = True) -> tuple[Finding, Any]:
     from ..deps import load, make_scanner, save
 
     settings = project.settings.get("deps") or {}
     auto = (project.settings.get("build") or {}).get("artifacts") == "auto"
+    imported = _imported(project)
+    if imported:
+        return imported
     if not run_commands:  # make -n runs $(shell ...) in Makefiles: not before approval
         held = project.state_file("deps.json").is_file()
         return Finding("deps", WARN, f"not run for an agent: reading the build "

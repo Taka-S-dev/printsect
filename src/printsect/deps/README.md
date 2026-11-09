@@ -84,6 +84,27 @@ there and read the file: `make -n -B -w > make.log`, then `psect-deps --from-log
 
 ## Other build systems
 
+For a build make cannot describe (a list of targets, a script calling the compiler, a
+build system of its own), have a small converter, in any language, write what was built
+from what, and read that file: `psect-deps --from-graph build.json` (`-` = stdin). It runs
+nothing, and nothing about that build has to go into printsect.
+
+```json
+{
+  "version": 1,
+  "objects": {"build/rx.o": {"source": "net/rx.c", "headers": ["net/net.h"]}},
+  "archives": {"build/libnet.a": {"objects": ["build/rx.o"]}},
+  "outs": {"build/app.out": {"archives": ["build/libnet.a"], "libs": ["m"]}},
+  "inputs": ["targets.csv"]
+}
+```
+
+Every path is relative to the project and inside it, and every part named must be listed
+(a prebuilt archive: `{"objects": [], "prebuilt": true}`). `headers` is optional; without
+it, a header's outputs are not known. `inputs` are the files the converter read: when one
+changes, the commands say so, and `psect build` stops until the file is written again.
+Anything else in the file stops with an error naming it.
+
 The reader is a plugin of the role `deps`. A package can add one through the entry
 point group `printsect.deps`; it needs `__init__(settings)` and
 `scan(project, *, log=None) -> Graph`. Pick it with `deps: {type: <name>}`. A class
@@ -98,6 +119,7 @@ without it the reader checks its own.
 | `graph.py` | The `Graph` and its questions (`which`, `roots_for_file`, …), with indexes built once |
 | `make.py` | The builtin reader: runs `deps.command`, then `makelog` and `includes` |
 | `makelog.py` | Turning `make -n` output into a graph |
+| `imported.py` | Reading and checking a graph file from `--from-graph` |
 | `includes.py` | Following `#include` |
 | `paths.py` | Making paths relative to the project, fast |
 | `search.py` | `Matcher`: text, glob or regex |

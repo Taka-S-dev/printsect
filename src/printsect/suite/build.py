@@ -31,7 +31,7 @@ from typing import Any
 from ..core.config import Project
 from ..core.errors import ConfigError, PsectError
 from ..core.fsutil import write_atomic
-from ..deps.graph import Graph
+from ..deps.graph import IMPORTED, Graph
 from ..probe.ledger import Ledger
 
 STEP_KINDS = ("archives", "outs", "once")
@@ -121,6 +121,9 @@ def load_graph(project: Project, log: Callable[[str], None], may_scan: bool = Tr
         if not graph.stale_inputs(project.root):
             return graph
         changed = ", ".join(graph.stale_inputs(project.root)[:3])
+        if graph.command == IMPORTED:  # make cannot read this build again
+            raise PsectError(f"{changed} changed since the graph file was read: write it "
+                             "again, then psect deps --from-graph FILE")
         log(f"note: {changed} changed since the build was read; reading it again")
     if not may_scan:
         raise PsectError("the build would have to be read (make -n), which is not allowed here")

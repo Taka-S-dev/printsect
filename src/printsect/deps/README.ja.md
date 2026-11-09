@@ -79,6 +79,25 @@ deps:
 
 ## ほかのビルド方式
 
+make では表せないビルド（ターゲットの一覧、コンパイラを呼ぶスクリプト、独自のビルド方式）では、どの言語でもよいので小さな変換
+プログラムで「何から何が作られるか」を書き出し、そのファイルを読ませます：`psect-deps --from-graph build.json`（`-` は標準入力）。
+何も実行せず、そのビルドの事情を printsect に入れる必要もありません。
+
+```json
+{
+  "version": 1,
+  "objects": {"build/rx.o": {"source": "net/rx.c", "headers": ["net/net.h"]}},
+  "archives": {"build/libnet.a": {"objects": ["build/rx.o"]}},
+  "outs": {"build/app.out": {"archives": ["build/libnet.a"], "libs": ["m"]}},
+  "inputs": ["targets.csv"]
+}
+```
+
+パスはすべてプロジェクトからの相対パスで、プロジェクトの中を指します。名前を挙げた部品はすべて一覧に載せます（ビルド済みの
+アーカイブは `{"objects": [], "prebuilt": true}`）。`headers` は省略でき、省略するとヘッダがどの出力に入るかは分かりません。
+`inputs` は変換プログラムが読んだファイルです。これが変わるとコマンドが知らせ、`psect build` はファイルを書き直すまで止まります。
+それ以外の内容があれば、その名前を示すエラーで止まります。
+
 読み取りは役割 `deps` のプラグインです。エントリポイントのグループ `printsect.deps` で追加でき、
 `__init__(settings)` と `scan(project, *, log=None) -> Graph` が必要です。`deps: {type: <name>}` で選びます。
 クラス属性 `SETTINGS`（キー -> 型、`make.py` と同じ形）があれば、printsect がそのキーを確かめます。
@@ -92,6 +111,7 @@ deps:
 | `graph.py` | `Graph` と、その問い合わせ（`which`、`roots_for_file` など）。索引は一度だけ作る |
 | `make.py` | 標準の読み取り：`deps.command` を実行し、`makelog` と `includes` に渡す |
 | `makelog.py` | `make -n` の出力をグラフにする |
+| `imported.py` | `--from-graph` のグラフファイルを読んで確かめる |
 | `includes.py` | `#include` をたどる |
 | `paths.py` | パスをプロジェクトからの相対パスに速く直す |
 | `search.py` | `Matcher`：文字列、グロブ、正規表現 |
