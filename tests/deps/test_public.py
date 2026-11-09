@@ -68,3 +68,43 @@ def test_a_person_at_the_terminal_gets_the_build_answer(project, capsys):
     capsys.readouterr()
     assert main(["map", "impact", "a.c", "--json", "--root", str(p.root)]) == 0
     assert json.loads(capsys.readouterr().out)["build"]["archives"] == ["l.a"]
+
+
+def unapproved_project(project):
+    p = project({"a.c": b"int a(void) { return 0; }\n"}, config="deps:\n  command: make x\n")
+    save(p, Graph(objects={"a.o": {"source": "a.c"}}, archives={"l.a": {"objects": ["a.o"]}}))
+    return p
+
+
+@pytest.mark.parametrize(("tool", "arguments"), [("map", {}), ("map_summary", {}),
+                                                 ("map_issues", {}), ("map_who", {"name": "a"})])
+def test_every_map_tool_leaves_the_saved_build_alone_before_approval(project, tool, arguments):
+    p = unapproved_project(project)
+    text, is_error = call(BY_NAME[tool], arguments, str(p.root))
+    assert not is_error, text
+    assert "l.a" not in text
+
+
+def test_a_person_still_gets_the_archives(project, capsys):
+    p = unapproved_project(project)
+    capsys.readouterr()
+    assert main(["map", "--json", "--root", str(p.root)]) == 0
+    assert json.loads(capsys.readouterr().out)["grouped_by"] == "archive"
+
+
+def test_the_names_of_libraries_are_checked_too():
+    text = project_text({"outs": [[0, [], [], ["acme"]]]})
+    assert leaks(text, ["acme"], "") == ["names to mask: 1"]
+
+
+def test_paths_and_secrets_are_looked_for_in_everything_on_the_page():
+    found = leaks('{"command": "C:/work/x password=hunter2"}', ["acme"], "", own="")
+    assert found == ["absolute paths: 1", "something like a password or key: 1"]
+
+
+def test_a_public_page_is_not_written_past_a_refused_knowledge_file(project, capsys):
+    p = project({"a.c": b"int a;\n", ".printsect/knowledge/names.yaml": b"mask: 3\n"})
+    save(p, Graph(objects={"a.o": {"source": "a.c"}}))
+    assert main(["deps", "html", "--public", "--no-open", "--root", str(p.root)]) == 1
+    assert "refused" in capsys.readouterr().err
+    assert not (p.root / ".printsect" / "deps.public.html").exists()

@@ -92,8 +92,8 @@ replaces deploy targets with `target-N`, and leaves out commands, probe notes an
 `--hide-sources` also replaces every source, header and object name, the map's modules, and
 drops symbols and include folders; archives and outputs keep their masked names. Masking only knows what it is told, so the page is then
 checked for absolute paths, anything like a password or key, the names to mask and this
-project's folder; if any remains, nothing is written and the error says which kinds and how
-many. It says what it masked, here and on the page.
+project's folder; if any remains, or a knowledge file that may hold names was refused, nothing
+is written and the error says which kinds and how many. It says what it masked, here and on the page.
 
 ```yaml
 public:                    # keep real names in printsect.local.yaml

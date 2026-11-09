@@ -122,7 +122,7 @@ def mask_map(data: dict[str, Any], masker: Masker) -> dict[str, Any]:
 
 # The parts of a page that come from the project; the rest is the page's own vocabulary,
 # where a short name to mask ("ui") would be found inside a word like "build".
-_FROM_THE_PROJECT = ("name", "paths", "copies", "excluded", "map", "probes", "public")
+_FROM_THE_PROJECT = ("name", "paths", "outs", "copies", "excluded", "map", "probes", "public")
 
 
 def project_text(data: dict[str, Any]) -> str:
@@ -145,8 +145,9 @@ def project_text(data: dict[str, Any]) -> str:
     return "\n".join(found)
 
 
-def leaks(text: str, names: list[str], root: str) -> list[str]:
-    """What is still in `text` that must not go out: kinds and counts, never the values."""
+def leaks(text: str, names: list[str], root: str, own: str | None = None) -> list[str]:
+    """What is still in `text` that must not go out: kinds and counts, never the values.
+    Names to mask are looked for in `own` when given: the parts from the project."""
     found = []
     drives = len(_DRIVE_OR_HOME.findall(text))
     if drives:
@@ -154,10 +155,11 @@ def leaks(text: str, names: list[str], root: str) -> list[str]:
     secrets = len(_SECRET.findall(text))
     if secrets:
         found.append(f"something like a password or key: {secrets}")
-    low = text.lower()
+    low = (text if own is None else own).lower()
     named = sum(low.count(n.lower()) for n in names)
     if named:
         found.append(f"names to mask: {named}")
+    low = text.lower()
     if root and root.lower().replace("\\", "/") in low.replace("\\/", "/"):
         found.append("this project's folder")
     return found

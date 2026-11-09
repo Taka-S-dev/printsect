@@ -261,7 +261,7 @@ def cmd_html(args: argparse.Namespace) -> int:
 def _public_page(args: argparse.Namespace, proj: Project,
                  graph: Graph) -> tuple[str, dict[str, int]]:
     """The page with the names taken out, or an error if something would still go out."""
-    from .html import page_data, render_data
+    from .html import embedded, page_data, render_data
     from .public import Masker, leaks, mask_graph, mask_map, project_text
 
     settings = proj.settings.get("public") or {}
@@ -280,7 +280,7 @@ def _public_page(args: argparse.Namespace, proj: Project,
                       f"paths replaced, {report['files_hidden']} file names hidden, "
                       f"{report['targets']} deploy targets replaced; commands and notes left out.")
     # The name of the project's folder masks as any other, but "project" is the page's own.
-    found = leaks(project_text(data), masker.names, proj.root.as_posix())
+    found = leaks(embedded(data), masker.names, proj.root.as_posix(), own=project_text(data))
     if found:
         raise PsectError("not written: this would still go out: " + "; ".join(found)
                          + ". Add what is wrong to public.mask, or use --hide-sources")

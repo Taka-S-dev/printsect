@@ -631,7 +631,7 @@ def test_what_would_still_go_out_is_found_without_being_repeated(text, said):
 def test_a_public_copy_stops_when_the_check_finds_something(project, capsys, monkeypatch):
     p = project(FILES)
     save(p, Graph(objects={"a.o": {"source": "a.c"}}))
-    monkeypatch.setattr(public_module, "leaks", lambda *args: ["absolute paths: 1"])
+    monkeypatch.setattr(public_module, "leaks", lambda *a, **k: ["absolute paths: 1"])
     code, _, text = public_page(p, capsys)
     assert code == 1 and "not written" in text.out
     assert not (p.state_dir / "deps.public.html").exists()

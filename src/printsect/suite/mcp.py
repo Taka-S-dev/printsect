@@ -286,7 +286,7 @@ def call(tool: Tool, arguments: dict[str, Any], root: str) -> tuple[str, bool]:
     """Run the tool's command; (its JSON answer as text, whether it failed)."""
     from ..cli import main
 
-    gated = tool.name in RUNS_SETTINGS or tool.name in ("doctor", "map_impact")
+    gated = tool.name in RUNS_SETTINGS or tool.name == "doctor" or tool.name.startswith("map")
     held = _held_back(root) if gated else []
     if held and tool.name in RUNS_SETTINGS:
         listed = "\n".join(f"  {c}" for c in held)
@@ -300,8 +300,8 @@ def call(tool: Tool, arguments: dict[str, Any], root: str) -> tuple[str, bool]:
     argv = tool.argv(arguments, root)
     if tool.name == "doctor" and held:
         argv.insert(1, "--no-commands")
-    if tool.name == "map_impact" and held:  # the map reads files; the saved build is held back
-        argv.insert(2, "--no-build-info")
+    if tool.name.startswith("map") and held:  # the map reads files; the saved build waits
+        argv.insert(1, "--no-build-info")
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):  # stdout belongs to the protocol
         code = main(argv)

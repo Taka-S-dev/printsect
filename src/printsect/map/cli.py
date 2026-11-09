@@ -73,6 +73,8 @@ def _list(text: str | None) -> list[str]:
 
 
 def _grouping(args: argparse.Namespace, proj: Project) -> dict[str, str] | None:
+    if args.no_build_info:
+        return None
     if args.by_out:
         groups: dict[str, str] | None = args.map_outputs(proj)
         if groups is None:
@@ -522,6 +524,7 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
                        help="rows per list")
     below.add_argument("--by-dir", action="store_true", default=argparse.SUPPRESS,
                        help="group by folder even when the build's archives are known")
+    parser.add_argument("--no-build-info", action="store_true", help=argparse.SUPPRESS)  # agents
     below.add_argument("--by-out", action="store_true", default=argparse.SUPPRESS,
                        help="group by the build's final outputs")
     below.add_argument("--only", default=argparse.SUPPRESS, metavar="CLASSES",
@@ -544,7 +547,6 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
                    help="how many steps (default: all)")
     p.add_argument("--up", action="store_true",
                    help="what it rests on, rather than what it reaches")
-    p.add_argument("--no-build-info", action="store_true", help=argparse.SUPPRESS)  # agents
     p.set_defaults(func=cmd_impact)
     p = sub.add_parser("issues", parents=[below],
                        help="cycles, tangled modules, links against layers")

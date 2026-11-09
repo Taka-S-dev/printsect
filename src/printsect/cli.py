@@ -109,7 +109,12 @@ def _page_map(proj: Project) -> dict[str, Any] | None:
 def _knowledge_names(proj: Project) -> list[str]:
     from .knowledge import load_knowledge
 
-    return load_knowledge(proj).mask
+    found = load_knowledge(proj)
+    if found.refused:  # it may be the file holding the names to mask
+        listed = ", ".join(r["file"] for r in found.refused[:5])
+        raise PsectError(f"not written: a knowledge file was refused ({listed}), and it may hold "
+                         "names to mask: psect knowledge says why; fix or remove it")
+    return found.mask
 
 
 def _knowledge_rules(proj: Project) -> dict[str, Any]:
