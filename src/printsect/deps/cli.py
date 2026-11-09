@@ -51,6 +51,10 @@ def _load(args: argparse.Namespace, proj: Project) -> Graph:
 
 def _file_arg(proj: Project, name: str) -> str:
     """A path as typed (from the current folder) or as the graph keeps it."""
+    if name.replace("\\", "/").startswith("//"):
+        # Only a name to look up: asking whether it exists would contact that server,
+        # which hands it this PC's login, and an agent can pass this value.
+        return name.replace("\\", "/")
     path = Path(name)
     if path.exists():
         try:

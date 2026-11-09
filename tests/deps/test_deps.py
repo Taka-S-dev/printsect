@@ -11,6 +11,7 @@ import pytest
 from printsect.cli import main
 from printsect.core.errors import PsectError
 from printsect.deps import load, make_scanner, save
+from printsect.deps import cli as cli_module
 from printsect.deps import make as make_module
 from printsect.deps.graph import Graph
 from printsect.deps.makelog import split_commands
@@ -334,6 +335,20 @@ def test_impact_goes_from_a_header_to_every_output(scanned, capsys):
     assert out["status"] == "inferred"
 
 
+@pytest.mark.parametrize("name", [r"\\server\share\a.c", "//server/share/a.c", r"\\?\C:\a.c"])
+@pytest.mark.parametrize("action", ["impact", "which"])
+def test_a_network_path_is_only_looked_up_never_opened(scanned, capsys, monkeypatch, name, action):
+    p, _ = scanned
+    root = str(p.root)
+
+    def opened(path):
+        raise AssertionError(f"{path} was touched")
+
+    monkeypatch.setattr(cli_module, "Path", opened)  # the only way this command opens a path
+    assert main(["deps", action, name, "--root", root]) == 1
+    capsys.readouterr()
+
+
 def test_impact_depth_stops_early(scanned, capsys):
     p, g = scanned
     near = g.impact("src/net/rx.c", depth=1)
@@ -476,6 +491,34 @@ def test_html_page_is_self_contained_and_safe(scanned):
     assert not re.search(r"(src|href)=[\"']?https?:", page)  # nothing is fetched
     assert "@import" not in page and "fetch(" not in page
     assert str(p.root) not in page and p.root.as_posix() not in page
+
+
+def page_script(page):
+    """The page's own script, with what it was made from filled in."""
+    return page[page.rindex("<script>") + len("<script>"):page.rindex("</script>")]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_script_of_the_page_parses(scanned, tmp_path):
+    from printsect.deps.html import render_html
+
+    _, g = scanned
+    script = tmp_path / "page.js"
+    script.write_text(page_script(render_html(g, {}, name="p")), encoding="utf-8")
+    done = subprocess.run(["node", "--check", str(script)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+
+
+def test_the_page_says_how_sure_each_part_is_and_has_every_view(scanned):
+    from printsect.deps.html import render_html
+
+    _, g = scanned
+    g.objects["obj/rx.o"]["status"] = "unresolved"
+    page = render_html(g, {}, name="p")
+    assert '"status":[[' in page and '"default_status":"build"' in page
+    for name in ("tab-graph", "tab-status", "tab-modules", "g-layout", "xpng", "mini"):
+        assert name in page
+    assert "__GRAPH_JS__" not in page
 
 
 def test_cli_deps_html_writes_the_page(scanned, capsys):
