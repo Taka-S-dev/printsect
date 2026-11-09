@@ -38,11 +38,13 @@ changed since, they say so; run `psect-deps` again.
 
 Try it: `psect-deps --root examples/demo`, then `psect-deps tree --root examples/demo`.
 
-The page has five views. **Outputs** and **Headers** are the tree and the header table.
+The page has five views. **Outputs** and **Headers** are the tree and the header table; the
+tree folds a target's objects by source folder (`folders` turns that off).
 **Graph** draws the parts: zoom, pan, drag a part, a minimap, four layouts, filters by kind,
 stage or status, upstream or downstream of the picked part to a depth you choose, and the
 ways through it picked out (inputs in one colour, outputs dashed in another). **Modules** is
-the same drawing of who uses whom, when printsect made the page with the map. **Status** lists
+the same drawing of who uses whom, when printsect made the page with the map, grouped by
+archive, final output or folder. **Status** lists
 everything not read for certain, and why. Picking a part shows what it is made from, where
 it goes, and what a change to it makes again; Compare sets parts side by side. Keys: `/`
 search; in the tree, arrows and Enter; in the graph, arrows, `+`, `-`, `0`. The graph saves as
@@ -126,6 +128,9 @@ nothing, and nothing about that build has to go into printsect.
   "inputs": ["targets.csv"]
 }
 ```
+
+Any object, archive or output can carry a `"name"` for people and an `"origin"` saying where the
+converter read it (`"targets.csv:12"`); the page shows both beside the part.
 
 The file can also say how sure it is of a part (`"status"` on an object, archive or output:
 `confirmed`, `build`, `script`, `inferred`, `unresolved`, `excluded`), what generates a file

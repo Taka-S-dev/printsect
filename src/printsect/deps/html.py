@@ -47,11 +47,15 @@ def _compact(graph: Graph) -> dict[str, Any]:
         for o, info in graph.outs.items()
     ]
     every = [*graph.objects, *graph.archives, *graph.outs]
+    tables = {**graph.objects, **graph.archives, **graph.outs}
+    labels = [[i(p), info.get("name", ""), info.get("origin", "")]
+              for p, info in tables.items() if info.get("name") or info.get("origin")]
     status = [[i(p), s] for p in every if (s := graph.status_of(p)) != graph.default_status]
     made = [[i(g), [i(x) for x in info.get("from", [])], i(info["by"]) if info.get("by") else -1]
             for g, info in graph.made.items()]
     return {"paths": paths, "objects": objects, "archives": archives, "outs": outs,
             "default_status": graph.default_status, "status": status, "made": made,
+            "labels": labels,
             "copies": [[target, i(source)] for target, source in graph.copies.items()],
             "excluded": [[i(p), why] for p, why in graph.excluded.items()]}
 

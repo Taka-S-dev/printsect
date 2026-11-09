@@ -81,7 +81,7 @@ li.closed > ul { display: none; }
 .tw { width: 16px; flex: none; text-align: center; color: var(--muted); border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
 .tw.leaf { visibility: hidden; }
 .k { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 0 4px; border-radius: 3px; border: 1px solid currentColor; line-height: 15px; }
-.k.out { color: var(--out); } .k.archive { color: var(--archive); } .k.object { color: var(--object); } .k.header { color: var(--header); } .k.source { color: var(--object); }
+.k.out { color: var(--out); } .k.archive { color: var(--archive); } .k.object { color: var(--object); } .k.header { color: var(--header); } .k.source { color: var(--object); } .k.folder { color: var(--muted); }
 .src { color: var(--muted); }
 mark { background: var(--hit-bg); color: var(--hit-text); border-radius: 2px; padding: 0 1px; }
 .pr { flex: none; font-size: 12px; color: var(--probe); background: var(--probe-bg); border-radius: 10px; padding: 0 7px; }
@@ -112,7 +112,7 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
 .node .tag { font-weight: 700; font-size: 10px; }
 .node.out rect { stroke: var(--out); stroke-width: 2; }
 .node.archive rect { stroke: var(--archive); stroke-width: 1.6; }
-.node.object rect { stroke: var(--object); }
+.node.object rect, .node.source rect { stroke: var(--object); }
 .node.module rect { stroke: var(--accent); stroke-width: 1.6; }
 .node.unsure rect { stroke-dasharray: 4 3; }
 .node.dim { opacity: .25; }
@@ -165,6 +165,7 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
     <span class="count" id="count" hidden></span>
     <button class="small" id="next" hidden aria-label="next match">▶</button>
   </div>
+  <label class="opt"><input type="checkbox" id="o-folders"> folders</label>
   <label class="opt"><input type="checkbox" id="o-sources"> .c names</label>
   <label class="opt"><input type="checkbox" id="o-headers"> all headers</label>
   <label class="opt"><input type="checkbox" id="o-probed"> probed only</label>
@@ -176,6 +177,7 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
   <span id="g-kinds" class="same" role="group" aria-label="Kinds of part">
     <label class="opt"><input type="checkbox" value="out"> outputs</label>
     <label class="opt"><input type="checkbox" value="archive"> libraries</label>
+    <label class="opt"><input type="checkbox" value="source"> sources</label>
     <label class="opt"><input type="checkbox" value="object"> objects</label>
     <label class="opt"><input type="checkbox" value="header"> headers</label>
     <label class="opt"><input type="checkbox" value="made"> generated</label>
@@ -183,8 +185,9 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
     <label class="opt"><input type="checkbox" value="deploy"> deployed</label>
   </span>
   <label class="opt">stage <select id="g-stage">
-    <option value="">any</option><option value="object,header,made,input">sources</option>
+    <option value="">any</option><option value="source,object,header,made,input">sources</option>
     <option value="archive">libraries</option><option value="out,deploy">final</option></select></label>
+  <label class="opt" id="g-group-box" hidden>group by <select id="g-group"></select></label>
   <label class="opt"><input type="checkbox" id="g-unres"> unresolved only</label>
   <label class="opt">show <select id="g-dir">
     <option value="all">everything</option><option value="up">upstream of the pick</option>
@@ -266,10 +269,12 @@ const madeOf = new Map(D.made.map(([g, from, by]) => [P[g], { from: from.map(at)
 const copiesOf = new Map(D.copies.map(([target, source]) => [target, P[source]]));
 const deployedFrom = new Map();
 for (const [target, source] of copiesOf) push(deployedFrom, source, target);
+const labels = new Map((D.labels || []).map(([p, name, origin]) => [P[p], { name, origin }]));
+const sourceFiles = new Set(Object.values(objects).map((o) => o.source).filter(Boolean));
 const inputsOf = new Set();
 for (const info of madeOf.values()) { info.from.forEach((x) => inputsOf.add(x)); if (info.by) inputsOf.add(info.by); }
 const kindAny = (p) => kindOf(p) || (madeOf.has(p) ? "made" : headerUsers.has(p) ? "header"
-  : copiesOf.has(p) ? "deploy" : inputsOf.has(p) ? "input" : null);
+  : copiesOf.has(p) ? "deploy" : inputsOf.has(p) ? "input" : sourceFiles.has(p) ? "source" : null);
 function statusOf(p) {
   if (excludedWhy.has(p)) return "excluded";
   if (statusMap.has(p)) return statusMap.get(p);
@@ -376,12 +381,13 @@ function spansOf(s, rx) {
 
 // ---- state -------------------------------------------------------------------
 const state = {
-  view: "tree", q: "", regex: false, sources: false, headers: false, probed: false,
+  view: "tree", q: "", regex: false, folders: true, sources: false, headers: false, probed: false,
   selected: null, opened: new Set(), closed: new Set(), fold: "auto",  // auto | all | none
   theme: "auto", gdir: "all", gdepth: 0, glayout: "lr", gunres: false,
+  ggroup: D.map && D.map.by_archive ? "by_archive" : "modules",
   gkinds: new Set(["out", "archive", "object", "made", "input", "deploy"]), pins: [],
 };
-const KEPT = ["view", "regex", "sources", "headers", "probed", "theme", "glayout"];
+const KEPT = ["view", "regex", "folders", "sources", "headers", "probed", "theme", "glayout"];
 const OPEN_KEY = "psect-deps-open:" + D.name;
 const OPEN_MAX = 2000;  // branches remembered between visits
 try {
@@ -408,6 +414,18 @@ function remember() {
 // ---- tree --------------------------------------------------------------------
 // A node: {path, kind, source, probes, hit, children, lazyHeaders}. With "all headers"
 // and no filter, an object's headers stay in lazyHeaders until its branch is opened.
+function inFolders(kids) {
+  const dirs = new Map();
+  for (const k of kids) {
+    if (k.kind !== "object") continue;
+    const p = k.source || k.path, at = p.lastIndexOf("/");
+    push(dirs, at < 0 ? "./" : p.slice(0, at + 1), k);
+  }
+  if (dirs.size < 2) return kids;
+  const folders = [...dirs].sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([path, children]) => ({ path, kind: "folder", probes: [], hit: false, children }));
+  return [...kids.filter((k) => k.kind !== "object"), ...folders];
+}
 function build(M) {
   const lazy = state.headers && !M && !state.probed;
   const node = (path, anc, inherited) => {
@@ -439,7 +457,8 @@ function build(M) {
     let keep = matched && (!state.probed || mine.length > 0);
     if (kind !== "object" && state.probed) keep = false;
     if (!keep && !kids.length) return null;
-    return { path, kind, source: src, probes: mine, hit, children: kids, lazyHeaders };
+    return { path, kind, source: src, probes: mine, hit, lazyHeaders,
+      children: state.folders && kind !== "object" ? inFolders(kids) : kids };
   };
   return roots.map((r) => node(r, new Set(), false)).filter(Boolean);
 }
@@ -477,7 +496,7 @@ function probeChip(list) {
     + (p.purpose ? ": " + p.purpose : "")).join("\n");
   return chip;
 }
-const KIND_TAG = { out: "OUT", archive: "LIB", object: "OBJ", header: "H" };
+const KIND_TAG = { out: "OUT", archive: "LIB", object: "OBJ", header: "H", folder: "DIR" };
 const NOT_SURE = ["unresolved", "excluded", "inferred"];
 function statusChip(path) {
   const s = statusOf(path);
@@ -529,16 +548,19 @@ function renderTree(M) {
     tw.tabIndex = -1;
     row.append(tw, el("span", "k " + n.kind, KIND_TAG[n.kind]));
     const label = el("span", "lbl");
-    label.append(highlighted(labelFor(n), M));
+    label.append(n.kind === "folder" ? n.path : highlighted(labelFor(n), M));
     row.append(label);
     if (has) {
       const many = n.lazyHeaders ? n.lazyHeaders.length : n.children.length;
       row.append(el("span", "n", "(" + many + ")"));
     }
-    const chip = statusChip(n.path);
+    const chip = n.kind === "folder" ? null : statusChip(n.path);
     if (chip) row.append(chip);
     if (n.probes.length) row.append(probeChip(n.probes));
-    row.addEventListener("click", () => select(n.kind === "object" && n.source ? n.source : n.path));
+    row.addEventListener("click", () => {
+      if (n.kind === "folder") tw.click();
+      else select(n.kind === "object" && n.source ? n.source : n.path);
+    });
     li.append(row);
     let sub = null;
     const fill = () => {
@@ -664,8 +686,9 @@ function renderDetails() {
   right.append(" ", copy, " ", compare);
   const s = statusOf(p);
   const why = excludedWhy.get(p);
-  right.append(el("p", "hint", "Status: " + s + (why ? " (" + why + ")" : "")
-    + " · read from " + (D.command || "?")));
+  const said = labels.get(p) || labels.get(nodeFor(p)) || {};
+  right.append(el("p", "hint", (said.name ? "Name: " + said.name + " · " : "") + "Status: " + s
+    + (why ? " (" + why + ")" : "") + " · read from " + (said.origin || D.command || "?")));
   renderCompare(right);
 
   const probes = probesOf(p);
@@ -785,6 +808,17 @@ function usesIndex() {
 function renderUses(right, p) {
   const index = usesIndex();
   if (!index) return;
+  const module = D.map[state.ggroup][p];
+  if (module) {
+    right.append(el("h3", "", "In module"));
+    const a = el("a", "go", module);
+    a.href = "#";
+    a.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      state.view = "modules"; state.selected = module; remember(); render();
+    });
+    right.append(a);
+  }
   for (const [title, table] of [["Uses in the source", index.out], ["Used in the source by", index.in]]) {
     const rows = table.get(p);
     if (!rows) continue;
@@ -804,7 +838,7 @@ function renderModule(right, p) {
   add("Used by", usedBy, "b");
   add("Uses", uses, "a");
   right.append(el("h3", "", "Files (" + m.groups.get(p).length + ")"));
-  right.append(list(m.groups.get(p), (f) => [f]));
+  right.append(list(m.groups.get(p), (f) => [go(f)]));
   return true;
 }
 
@@ -826,6 +860,7 @@ __GRAPH_JS__
 const VIEWS = ["tree", "headers", "graph", "modules", "status"];
 function render() {
   let M = null;
+  listAt = -1;
   const q = $("q");
   q.classList.remove("bad");
   q.title = "";
@@ -836,7 +871,10 @@ function render() {
   $("left").classList.toggle("graph", drawing);
   $("gbar").hidden = !drawing;
   $("g-kinds").hidden = state.view === "modules";
-  for (const id of ["o-sources", "o-headers"]) $(id).parentElement.hidden = state.view !== "tree";
+  for (const id of ["o-folders", "o-sources", "o-headers"]) $(id).parentElement.hidden = state.view !== "tree";
+  const modulesView = state.view === "modules";
+  $("g-stage").parentElement.hidden = $("g-unres").parentElement.hidden = modulesView;
+  $("g-group-box").hidden = !modulesView || $("g-group").options.length < 2;
   $("expand").hidden = $("collapse").hidden = state.view !== "tree";
   $("o-probed").parentElement.hidden = !["tree", "headers"].includes(state.view);
   if (drawing) renderGraph(M);
@@ -860,6 +898,7 @@ function writeHash() {
   if (state.gunres) h.set("unres", "1");
   if (state.glayout !== "lr") h.set("layout", state.glayout);
   if (state.view === "graph") h.set("kinds", [...state.gkinds].join(","));
+  if (state.view === "modules") h.set("group", state.ggroup);
   const text = h.toString();
   try { history.replaceState(null, "", text ? "#" + text : location.pathname); }
   catch (e) { /* some browsers refuse this for local files */ }
@@ -873,12 +912,14 @@ function readHash() {
   if (h.has("layout")) state.glayout = h.get("layout");
   if (h.has("kinds")) state.gkinds = new Set(h.get("kinds").split(",").filter(Boolean));
   if (state.view === "modules" && !D.map) state.view = "tree";
+  if (D.map && D.map[h.get("group")]) state.ggroup = h.get("group");
   syncControls();
   state.q = h.get("q") || "";
   state.selected = h.get("file") || null;
   $("q").value = state.q;
 }
 function syncControls() {
+  $("g-group").value = state.ggroup;
   $("g-dir").value = state.gdir;
   $("g-depth").value = state.gdepth;
   $("g-unres").checked = state.gunres;
@@ -887,7 +928,13 @@ function syncControls() {
 }
 window.addEventListener("hashchange", () => { readHash(); render(); });
 
-if (D.map) $("tab-modules").hidden = false;
+if (D.map) {
+  $("tab-modules").hidden = false;
+  for (const [key, text] of [["by_archive", "archive"], ["by_output", "final output"], ["modules", "folder"]]) {
+    if (D.map[key]) { const o = el("option", "", text); o.value = key; $("g-group").append(o); }
+  }
+  $("g-group").addEventListener("change", (ev) => { state.ggroup = ev.target.value; state.selected = null; render(); });
+}
 if (D.public) {
   $("public").hidden = false;
   $("public").textContent = "Public copy: " + D.public;
@@ -920,7 +967,7 @@ if (D.stale.length) {
   s.textContent = "Changed since this was made: " + D.stale.slice(0, 5).join(", ")
     + (D.stale.length > 5 ? " …" : "") + ". Run psect deps html again for a fresh view.";
 }
-for (const [id, key] of [["o-regex", "regex"], ["o-sources", "sources"],
+for (const [id, key] of [["o-regex", "regex"], ["o-folders", "folders"], ["o-sources", "sources"],
   ["o-headers", "headers"], ["o-probed", "probed"]]) {
   const box = $(id);
   box.checked = state[key];

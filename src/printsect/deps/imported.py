@@ -55,11 +55,17 @@ def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
     return section
 
 
-def _status(fields: dict[str, Any], info: dict[str, Any], where: str) -> dict[str, Any]:
+_DESCRIBED = {"status", "name", "origin"}  # what any part of the build can say about itself
+
+
+def _described(fields: dict[str, Any], info: dict[str, Any], where: str) -> dict[str, Any]:
     if "status" in fields:
         if fields["status"] not in STATUSES:
             raise PsectError(f"{where}.status: one of {', '.join(STATUSES)}")
         info["status"] = fields["status"]
+    for key in ("name", "origin"):
+        if key in fields:
+            info[key] = _label(fields[key], f"{where}.{key}")
     return info
 
 
@@ -71,19 +77,19 @@ def _label(value: Any, where: str) -> str:
 
 
 def _object(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"source", "headers", "status"}, where)
+    fields = _mapping(item, {"source", "headers", *_DESCRIBED}, where)
     source = fields.get("source")
     info: dict[str, Any] = {"source": None if source is None else _path(source, f"{where}.source")}
-    _status(fields, info, where)
+    _described(fields, info, where)
     if "headers" in fields:
         info["headers"] = _paths(fields, "headers", where)
     return info
 
 
 def _archive(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"objects", "prebuilt", "made_in", "status"}, where)
+    fields = _mapping(item, {"objects", "prebuilt", "made_in", *_DESCRIBED}, where)
     info: dict[str, Any] = {"objects": _paths(fields, "objects", where)}
-    _status(fields, info, where)
+    _described(fields, info, where)
     if "prebuilt" in fields:
         if not isinstance(fields["prebuilt"], bool):
             raise PsectError(f"{where}.prebuilt: expected true or false")
@@ -94,11 +100,11 @@ def _archive(item: Any, where: str) -> dict[str, Any]:
 
 
 def _out(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"objects", "archives", "libs", "made_in", "status"}, where)
+    fields = _mapping(item, {"objects", "archives", "libs", "made_in", *_DESCRIBED}, where)
     info: dict[str, Any] = {"objects": _paths(fields, "objects", where),
                             "archives": _paths(fields, "archives", where),
                             "libs": _paths(fields, "libs", where)}
-    _status(fields, info, where)
+    _described(fields, info, where)
     if "made_in" in fields:
         info["made_in"] = _path(fields["made_in"], f"{where}.made_in")
     return info

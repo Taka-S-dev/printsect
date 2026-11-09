@@ -11,7 +11,7 @@ const svgEl = (tag, attrs) => {
   for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
   return e;
 };
-const TAGS = { out: "OUT", archive: "LIB", object: "OBJ", header: "H", made: "GEN", input: "IN",
+const TAGS = { out: "OUT", archive: "LIB", object: "OBJ", source: "SRC", header: "H", made: "GEN", input: "IN",
   deploy: "DEP", module: "MOD" };
 const EDGE_TEXT = { includes: "is included by", compiles_to: "is compiled into",
   archives: "is archived into", links: "is linked into", generates: "generates",
@@ -23,6 +23,7 @@ function depsEdges() {
   const E = [];
   for (const [o, info] of Object.entries(objects)) {
     for (const h of info.headers) E.push({ a: h, b: o, type: "includes" });
+    if (info.source && !madeOf.has(info.source)) E.push({ a: info.source, b: o, type: "compiles_to" });
   }
   for (const [a, info] of Object.entries(archives)) {
     for (const o of info.objects) E.push({ a: o, b: a, type: "archives" });
@@ -45,17 +46,18 @@ function depsEdges() {
 // The node a picked file stands for: a source is drawn as the object made from it.
 function nodeFor(path) {
   if (!path) return null;
-  if (kindAny(path)) return path;
+  const kind = kindAny(path);
+  if (kind && (kind !== "source" || state.gkinds.has("source"))) return path;
   const own = users.get(path);
   return own && own.length ? own[0] : null;
 }
 
 function moduleData() {
-  const groups = new Map();
-  for (const [file, module] of Object.entries(D.map.modules)) push(groups, module, file);
+  const groups = new Map(), owner = D.map[state.ggroup];
+  for (const [file, module] of Object.entries(owner)) push(groups, module, file);
   const between = new Map();
   for (const [user, definer, symbols] of D.map.edges) {
-    const a = D.map.modules[user], b = D.map.modules[definer];
+    const a = owner[user], b = owner[definer];
     if (!a || !b || a === b) continue;
     const key = a + "\u0000" + b;
     between.set(key, (between.get(key) || 0) + symbols.length);
@@ -69,13 +71,36 @@ function moduleData() {
   };
 }
 
+// The parts that go into `focus` or that it goes into, as far as the depth asks.
+function reachOf(edges, focus) {
+  const reach = new Set([focus]);
+  const up = new Map(), down = new Map();
+  for (const e of edges) { push(up, e.b, e.a); push(down, e.a, e.b); }
+  const walk = (table) => {
+    let level = [focus], depth = 0;
+    while (level.length && (!state.gdepth || depth < state.gdepth)) {
+      const next = [];
+      for (const n of level) for (const m of table.get(n) || []) {
+        if (!reach.has(m)) { reach.add(m); next.push(m); }
+      }
+      level = next; depth++;
+    }
+  };
+  if (state.gdir !== "down") walk(up);
+  if (state.gdir !== "up") walk(down);
+  return reach;
+}
+
 // What the filters keep: { nodes: [{id, kind, status}], edges, note }.
 function viewData() {
   let edges, kindOfNode, statusOfNode, focus = null, note = "";
   if (state.view === "modules") {
     const m = moduleData();
-    const nodes = [...m.groups.keys()].map((id) => ({ id, kind: "module", status: "" }));
-    return { nodes, edges: m.edges, note: "", focus: state.selected && m.groups.has(state.selected) ? state.selected : null };
+    focus = state.selected && m.groups.has(state.selected) ? state.selected : null;
+    const near = focus && state.gdir !== "all" ? reachOf(m.edges, focus) : null;
+    const nodes = [...m.groups.keys()].filter((id) => !near || near.has(id))
+      .map((id) => ({ id, kind: "module", status: "" }));
+    return { nodes, edges: m.edges.filter((e) => !near || (near.has(e.a) && near.has(e.b))), note: "", focus };
   }
   edges = depsEdges();
   kindOfNode = kindAny;
@@ -86,24 +111,7 @@ function viewData() {
   const all = new Set();
   for (const e of edges) { all.add(e.a); all.add(e.b); }
   for (const r of roots) all.add(r);
-  let reach = null;
-  if (focus && state.gdir !== "all") {
-    reach = new Set([focus]);
-    const up = new Map(), down = new Map();
-    for (const e of edges) { push(up, e.b, e.a); push(down, e.a, e.b); }
-    const walk = (table) => {
-      let level = [focus], depth = 0;
-      while (level.length && (!state.gdepth || depth < state.gdepth)) {
-        const next = [];
-        for (const n of level) for (const m of table.get(n) || []) {
-          if (!reach.has(m)) { reach.add(m); next.push(m); }
-        }
-        level = next; depth++;
-      }
-    };
-    if (state.gdir !== "down") walk(up);
-    if (state.gdir !== "up") walk(down);
-  }
+  const reach = focus && state.gdir !== "all" ? reachOf(edges, focus) : null;
   for (const id of all) {
     if (reach && !reach.has(id)) continue;
     if (id !== focus && !stageKinds.has(kindOfNode(id) || "input")) continue;
@@ -113,7 +121,7 @@ function viewData() {
   if (!reach && keep.size > WHOLE_MAX) {
     let dropped = 0;
     for (const id of [...keep]) {
-      if (["object", "header"].includes(kindOfNode(id)) && id !== focus) { keep.delete(id); dropped++; }
+      if (["source", "object", "header"].includes(kindOfNode(id)) && id !== focus) { keep.delete(id); dropped++; }
     }
     note = dropped + " objects and headers are left out of this large view: pick a part and "
       + "choose Upstream or Downstream to see them around it.";
@@ -322,7 +330,7 @@ function schedule() {
 }
 function shortLabel(n) {
   const info = objects[n.id];
-  const text = info && info.source ? info.source : n.id;
+  const text = info && info.source && !state.gkinds.has("source") ? info.source : n.id;
   return text.length > 30 ? "…" + text.slice(-29) : text;
 }
 function edgePath(a, b) {
@@ -478,14 +486,26 @@ function graphKey(ev) {
   } else return;
   ev.preventDefault();
 }
+let listAt = -1;
+const drawn = () => ["graph", "modules"].includes(state.view);
+const listHits = () => [...document.querySelectorAll("#left [data-path]")].filter((r) => r.querySelector("mark"));
 function showCount() {
   const c = $("count");
-  const n = G.hits.length;
-  c.hidden = !state.q || !["graph", "modules"].includes(state.view);
-  c.textContent = (n ? (G.hitAt + 1) : 0) + " / " + n;
+  const n = drawn() ? G.hits.length : listHits().length;
+  c.hidden = !state.q || state.view === "status";
+  c.textContent = (n ? ((drawn() ? G.hitAt : listAt) + 1) : 0) + " / " + n;
   $("prev").hidden = $("next").hidden = c.hidden;
 }
 function stepHit(by) {
+  if (!drawn()) {
+    const rows = listHits();
+    if (!rows.length) return;
+    listAt = (listAt + by + rows.length) % rows.length;
+    rows[listAt].scrollIntoView({ block: "center" });
+    select(rows[listAt].dataset.src || rows[listAt].dataset.path);
+    showCount();
+    return;
+  }
   if (!G.hits.length) return;
   G.hitAt = (G.hitAt + by + G.hits.length) % G.hits.length;
   showCount();

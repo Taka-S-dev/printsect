@@ -115,8 +115,10 @@ def mask_graph(graph: Graph, masker: Masker) -> Graph:
 
 
 def mask_map(data: dict[str, Any], masker: Masker) -> dict[str, Any]:
-    return {"modules": {masker.file(k): masker.module(v) for k, v in data["modules"].items()},
-            "edges": [[masker.file(a), masker.file(b), masker.symbols(s)]
+    grouped: dict[str, Any] = {
+               key: {masker.file(k): masker.module(v) for k, v in data[key].items()}
+               for key in ("modules", "by_archive", "by_output") if key in data}
+    return {**grouped, "edges": [[masker.file(a), masker.file(b), masker.symbols(s)]
                       for a, b, s in data["edges"]]}
 
 
@@ -133,7 +135,7 @@ def project_text(data: dict[str, Any]) -> str:
             found.append(value)
         elif isinstance(value, dict):
             for key, inner in value.items():
-                if key not in ("modules", "edges"):  # the map's own two fields
+                if key not in ("modules", "by_archive", "by_output", "edges"):  # the map's own
                     found.append(str(key))
                 walk(inner)
         elif isinstance(value, list):

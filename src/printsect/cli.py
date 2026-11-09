@@ -103,7 +103,7 @@ def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
 def _page_map(proj: Project) -> dict[str, Any] | None:
     from .map.cli import page_data
 
-    return page_data(proj)
+    return page_data(proj, _archive_modules(proj), _output_modules(proj))
 
 
 def _knowledge_names(proj: Project) -> list[str]:
