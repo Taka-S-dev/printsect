@@ -24,6 +24,7 @@ from ..core.fsutil import is_link, plain_or_absent
 USER_PREFIX = "user-knowledge"
 DEFAULT_PATHS = [".printsect/knowledge", USER_PREFIX + "/printsect"]
 MAX_FILE_BYTES = 256 << 10
+MAX_GIT_INDEX = 256 << 20
 SUFFIXES = (".md", ".yaml", ".yml")
 FIELDS = {"version", "scope", "classes", "layers", "mask", "notes"}
 SCOPE_FIELDS = {"project", "build", "platform", "applies_to"}
@@ -165,6 +166,36 @@ def _files(folder: Path, refused: list[dict[str, str]], label: str) -> list[tupl
     return sorted(found)
 
 
+def _names_git_tracks(root: Path) -> bytes | None:
+    """The index file of a git checkout, where each tracked path ends in a NUL byte. It is
+    read, because running git in a project can run what the project's git settings name.
+    None when there is no checkout to ask, or its index packs the paths (version 4)."""
+    folder, index = root / ".git", root / ".git" / "index"
+    if not plain_or_absent(folder, index) or not index.is_file():
+        return None
+    try:
+        with open(index, "rb") as handle:
+            data = handle.read(MAX_GIT_INDEX + 1)
+    except OSError:
+        return None
+    return data if len(data) <= MAX_GIT_INDEX and data[:8] != b"DIRC\0\0\0\4" else None
+
+
+def _privacy_warning(name: str, project: Project, tracked: bytes | None) -> str | None:
+    """What to say about a file of private names that version control could pick up."""
+    if name.startswith("user:"):
+        return None
+    if tracked is not None and name.encode() + b"\0" in tracked:
+        return f"{name} is tracked by git, so whatever it names goes out with the repository"
+    if name.startswith(".printsect/"):
+        ignore = project.state_dir / ".gitignore"
+        checkout = project.root / ".git"
+        unsafe = (plain_or_absent(checkout) and checkout.is_dir()
+                  and plain_or_absent(project.state_dir, ignore) and not ignore.is_file())
+        return f"{name}: nothing keeps .printsect out of git yet" if unsafe else None
+    return f"{name} is in the project: keep it out of version control if it holds private names"
+
+
 def _out_of_scope(item: Item, project: Project) -> str | None:
     settings = project.settings.get("knowledge") or {}
     own = {"project": settings.get("profile") or project.root.name,
@@ -206,6 +237,7 @@ def _combine(result: Knowledge) -> None:
 
 def load_knowledge(project: Project) -> Knowledge:
     result = Knowledge()
+    tracked = _names_git_tracks(project.root)
     for label, folder in _folders(project):
         if not plain_or_absent(folder):
             result.refused.append({"file": label, "why": "a link, which is not followed"})
@@ -233,8 +265,8 @@ def load_knowledge(project: Project) -> Knowledge:
                 result.skipped.append({"file": name, "why": why})
                 continue
             result.loaded.append(item)
-            if not name.startswith(("user:", ".printsect/")):
-                result.warnings.append(f"{name} is in the project: keep it out of version "
-                                       "control if it holds private names")
+            warning = _privacy_warning(name, project, tracked)
+            if warning:
+                result.warnings.append(warning)
     _combine(result)
     return result

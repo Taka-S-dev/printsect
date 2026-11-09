@@ -39,7 +39,8 @@ knowledge:
 `user-knowledge/printsect` is `knowledge/` in your user folder (`%APPDATA%\printsect` on
 Windows, `~/.config/printsect` elsewhere). A path outside the project is refused. A
 file somewhere else in the project is read with a warning, since it may be tracked: anything
-private does not belong in a public repository.
+private does not belong in a public repository. A file git tracks is named in a warning of
+its own; that comes from reading `.git/index`, and git is not run.
 
 ## A file
 

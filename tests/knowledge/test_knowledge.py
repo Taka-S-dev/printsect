@@ -218,3 +218,36 @@ def test_reading_runs_no_command(project, capsys, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", ran)
     p = project({KN + "a.yaml": b"version: 1\n"})
     assert answer(capsys, "--root", str(p.root))["loaded"]
+
+
+def git_index_with(root, *names):
+    (root / ".git").mkdir()
+    (root / ".git" / "index").write_bytes(
+        b"DIRC\0\0\0\2" + b"".join(b"x" * 62 + n.encode() + b"\0\0" for n in names))
+
+
+def test_a_file_git_tracks_is_called_out(project, capsys):
+    p = project({"notes/a.yaml": b"mask: [x]\n", KN + "b.yaml": b"mask: [y]\n"},
+                config="knowledge:\n  paths: [notes, .printsect/knowledge]\n")
+    git_index_with(p.root, "notes/a.yaml", KN + "b.yaml")
+    out = answer(capsys, "--root", str(p.root))
+    assert sum("tracked by git" in w for w in out["warnings"]) == 2
+
+
+def test_the_state_folder_is_flagged_only_while_nothing_ignores_it(project, capsys):
+    p = project({KN + "b.yaml": b"mask: [y]\n"})
+    git_index_with(p.root, "other.c")
+    assert "out of git" in answer(capsys, "--root", str(p.root))["warnings"][0]
+    (p.root / ".printsect" / ".gitignore").write_text("*\n", encoding="utf-8")
+    assert answer(capsys, "--root", str(p.root))["warnings"] == []
+
+
+def test_a_linked_git_folder_is_not_read(project, capsys, tmp_path_factory):
+    outside = tmp_path_factory.mktemp("outside")
+    (outside / "index").write_bytes(b"DIRC\0\0\0\2notes/a.yaml\0")
+    p = project({"notes/a.yaml": b"mask: [x]\n"}, config="knowledge:\n  paths: [notes]\n")
+    try:
+        os.symlink(outside, p.root / ".git", target_is_directory=True)
+    except OSError:
+        pytest.skip("this PC does not let us make a link")
+    assert "tracked by git" not in answer(capsys, "--root", str(p.root))["warnings"][0]
