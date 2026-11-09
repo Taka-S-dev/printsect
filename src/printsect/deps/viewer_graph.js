@@ -1,6 +1,6 @@
 // ---- graph view --------------------------------------------------------------
 // Only what is on screen is put in the page, so a large build stays quick; the layout
-// is worked out for the nodes kept by the filters, in steps when it is a long one.
+// is worked out for the nodes kept by the filters, and the force layout in steps.
 const NODE_W = 210, NODE_H = 30, GAP_X = 70, GAP_Y = 14;
 const FORCE_MAX = 400;     // above this, a force layout would not settle in reasonable time
 const WHOLE_MAX = 1500;    // above this, the whole graph starts without objects and headers
