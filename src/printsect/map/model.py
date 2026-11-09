@@ -12,6 +12,7 @@ out is always part of the answer: not on the map does not mean not there.
 
 from __future__ import annotations
 
+import fnmatch
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -40,16 +41,24 @@ class Tables:
     omitted: dict[str, int] = field(default_factory=dict)
     inside_if: int = 0  # definitions counted though an #if may leave them out of a build
     entries: dict[str, FileEntry] = field(default_factory=dict)
+    unsure_by_file: Counter[str] = field(default_factory=Counter)  # uses left out, per file
+    confirmed: bool = False
+    hidden: dict[str, int] = field(default_factory=dict)  # class -> files taken out by a filter
 
 
-def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
+def build(index: Index, in_build: Iterable[str] | None = None,
+          hidden: dict[str, str] | None = None) -> Tables:
     """The file-to-file edges. `in_build` keeps only those files, when the build is known:
-    other files (another platform's, for one) cannot be what a built file means."""
+    other files (another platform's, for one) cannot be what a built file means.
+    `hidden` is {file: its class} for the files a filter takes out."""
     scope = set(in_build) if in_build is not None else None
-    files = {f: e for f, e in index.files.items() if scope is None or f in scope}
+    taken = hidden or {}
+    in_scope = {f: e for f, e in index.files.items() if scope is None or f in scope}
+    files = {f: e for f, e in in_scope.items() if f not in taken}
     definers: dict[str, list[str]] = defaultdict(list)
     statics: set[str] = set()
-    tables = Tables(files=sorted(files), entries=files)
+    tables = Tables(files=sorted(files), entries=files, confirmed=index.confirmed,
+                    hidden=dict(Counter(c for f, c in taken.items() if f in in_scope)))
     for name, entry in files.items():
         for symbol, _kind, static, line in entry.defs:
             tables.lines.setdefault((name, symbol), line)
@@ -69,6 +78,7 @@ def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
                 static_refs += symbol in statics
             elif len(where) > 1:
                 same_name_refs += 1
+                tables.unsure_by_file[name] += 1
             else:
                 edges[(name, where[0])].append(symbol)
     tables.edges = dict(edges)
@@ -79,10 +89,34 @@ def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
         "unbalanced_files": sum(e.unbalanced for e in files.values()),
         "too_long_declarations": sum(e.too_long for e in files.values()),
         "too_large": index.too_large, "unreadable": index.unreadable, "links": index.links,
-        "excluded": index.excluded, "not_in_build": len(index.files) - len(files),
+        "excluded": index.excluded, "not_in_build": len(index.files) - len(in_scope),
     }
     tables.inside_if = sum(e.inside_if for e in files.values())
     return tables
+
+
+DEFAULT_CLASSES = {
+    "third_party": ["third_party/*", "thirdparty/*", "vendor/*", "external/*", "extern/*",
+                    "*/third_party/*", "*/vendor/*", "*/external/*"],
+    "generated": ["gen/*", "generated/*", "*/gen/*", "*/generated/*", "*_gen.c", "*.gen.c"],
+    "test": ["test/*", "tests/*", "*/test/*", "*/tests/*", "*_test.c", "test_*.c", "*/test_*.c"],
+    "build_script": ["tools/*", "scripts/*", "build/*"],
+    "platform": ["arch/*", "bsp/*", "platform/*", "port/*", "ports/*", "hal/*", "*/arch/*"],
+}
+PRODUCT = "product"
+
+
+def classify(files: Iterable[str], rules: dict[str, list[str]]) -> dict[str, str]:
+    """Each file's class. A project's own rules go first; the first that matches holds."""
+    table = [*rules.items(), *DEFAULT_CLASSES.items()]
+    found = {}
+    for file in files:
+        found[file] = PRODUCT
+        for name, patterns in table:
+            if any(fnmatch.fnmatchcase(file, str(p)) for p in patterns):
+                found[file] = name
+                break
+    return found
 
 
 def _folder_at(file: str, depth: int) -> str:
@@ -198,7 +232,22 @@ class Map:
         return {"files": len(self.t.files), "grouped_by": self.grouped_by,
                 "modules": _capped(rows, top), "edges": _capped(edges, top),
                 "cycles": _capped(self._cycles(between, top), top),
-                "omitted": self.t.omitted, "inside_if": self.t.inside_if}
+                "omitted": self.t.omitted, "inside_if": self.t.inside_if,
+                "hidden": self.t.hidden, "confidence": self.confidence()}
+
+    def confidence(self) -> dict[str, int]:
+        """The uses by how sure the map is of them. Matching by name without a compiler is
+        at best `likely`; a compiler-backed index can say `confirmed`."""
+        seen = sum(len(s) for s in self.t.edges.values())
+        return {"confirmed" if self.t.confirmed else "likely": seen,
+                "ambiguous": self.t.omitted["same_name_refs"],
+                "unresolved": self.t.omitted["static_refs"],
+                "excluded": self.t.omitted["excluded"]}
+
+    def at_line(self, file: str, line: int) -> str | None:
+        """The function or variable defined at or just above a line of a file."""
+        before = [d for d in self.t.entries[file].defs if d[3] <= line]
+        return max(before, key=lambda d: d[3])[0] if before else None
 
     def _cycles(self, between: Counter[tuple[str, str]], top: int) -> list[dict[str, Any]]:
         """Each loop among the modules, with one shortest way round and its symbols."""
@@ -306,7 +355,9 @@ class Map:
         for row in listed["shown"]:
             found = lines[row["file"]] if row["own_file"] else lines_in(row["file"])
             row.update(lines=found[:LINES_SHOWN], more_lines=max(0, len(found) - LINES_SHOWN))
+        word = {"one": "confirmed" if self.t.confirmed else "likely", "same_name": "ambiguous"}
         return {"kind": "symbol", "name": name, "status": status,
+                "confidence": word.get(status, "unresolved"),
                 "defined": _capped(defined, top), "users": listed,
                 "cannot_reach": len(users) if status == "static" else 0,
                 "not_seen": NOT_SEEN, "grouped_by": self.grouped_by}

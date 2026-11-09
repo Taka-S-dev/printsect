@@ -62,6 +62,51 @@ def _archive_modules(proj: Project) -> dict[str, str] | None:
     return owner or None
 
 
+def _output_modules(proj: Project) -> dict[str, str] | None:
+    """Each source file -> the final outputs it ends up in, joined when more than one."""
+    from .deps import DEPS_FILE, load
+
+    if not proj.state_file(DEPS_FILE).is_file():
+        return None
+    try:
+        graph = load(proj)
+        owner = {s: "+".join(sorted(graph.roots_for_file(s))) or "(not in an output)"
+                 for s in graph.sources()}
+    except (PsectError, AttributeError, TypeError, KeyError):
+        return None
+    if any(not (isinstance(n, str) and n.isprintable()) for pair in owner.items() for n in pair):
+        return None
+    return owner or None
+
+
+def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
+    """What the build makes again from these files; only the saved reading is looked at."""
+    from .deps import DEPS_FILE, load
+
+    if not proj.state_file(DEPS_FILE).is_file():
+        return None
+    try:
+        graph = load(proj)
+        found: dict[str, list[str]] = {"objects": [], "archives": [], "outs": [], "deployed": []}
+        for file in files:
+            hit = graph.impact(file)
+            for key, names in found.items():
+                names.extend(n for n in hit[key] if n not in names)
+    except (PsectError, AttributeError, TypeError, KeyError):
+        return None
+    return found
+
+
+def _page_map(proj: Project) -> dict[str, Any] | None:
+    from .map.cli import page_data
+
+    return page_data(proj)
+
+
+def _knowledge_names(proj: Project) -> list[str]:
+    return []
+
+
 def _warn_probe_in_untraced_header(proj: Project, probe: Any) -> list[str]:
     from .deps import HEADERS_OFF_NOTE, is_header
 
@@ -462,7 +507,8 @@ def build_parser() -> argparse.ArgumentParser:
     deps_cli.configure(
         sub.add_parser("deps", parents=[common()],
                        help="what each output is built from (reads the Makefile)"),
-        marks=_probe_marks, name="psect deps")
+        marks=_probe_marks, name="psect deps", map_data=_page_map,
+        mask_names=_knowledge_names)
     probe = sub.add_parser("probe", help="put in, list and take out probes")
     probe_cli.configure(probe.add_subparsers(dest="action", required=True),
                         after_add=[_warn_probe_in_untraced_header])
@@ -474,7 +520,8 @@ def build_parser() -> argparse.ArgumentParser:
     map_cli.configure(
         sub.add_parser("map", parents=[common()],
                        help="which module uses which (reads the source, runs nothing)"),
-        modules=_archive_modules, marks=_probe_marks)
+        modules=_archive_modules, marks=_probe_marks, outputs=_output_modules,
+        builds=_map_builds)
     return parser
 
 

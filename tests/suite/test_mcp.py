@@ -79,7 +79,8 @@ def test_an_unknown_protocol_version_gets_the_newest():
 SAMPLE = {"file": "rx.c", "line": 2, "text": "x", "group": "g", "purpose": "p", "expect": "e",
           "n": 1, "pattern": "p", "regex": True, "find": "rx", "probed": True, "since": 3,
           "timeout": 1.5, "run": 2, "resume": True, "no_build": True, "no_deploy": True,
-          "topic": "setup", "name": "board-a", "all": True, "module": "net", "top": 5, "depth": 1,
+          "topic": "setup", "name": "board-a", "all": True, "module": "net", "top": 5,
+          "depth": 1, "near": "rx", "up": True,
           "by_dir": True}
 
 

@@ -9,10 +9,11 @@ import pytest
 
 from printsect.cli import main as psect
 from printsect.map import index as index_module
+from printsect.map.analysis import issues
 from printsect.map.cli import main
 from printsect.map.cycles import loops, round_trip
 from printsect.map.index import FileEntry, Index
-from printsect.map.model import Map, build, directory_groups
+from printsect.map.model import Map, build, classify, directory_groups
 from printsect.suite.mcp import BY_NAME, RUNS_SETTINGS, call
 
 NET = {
@@ -251,6 +252,236 @@ def test_who_works_with_an_index_that_gives_no_lines():
     t = build(Index(files={"a.c": entry(("f", False)), "b.c": entry(refs=["f"])}))
     out = Map(t).symbol("f", 10)
     assert [(r["file"], r["lines"]) for r in out["users"]["shown"]] == [("b.c", [])]
+
+
+CHAIN = {
+    "app/main.c": b"int main(void) { return mid(); }\n",
+    "svc/mid.c": b"int mid(void) { return low(); }\n",
+    "drv/low.c": b"int low(void) { return 0; }\n",
+    "drv/other.c": b"int other(void) { return 0; }\n",
+}
+
+
+def test_impact_goes_level_by_level(project, capsys):
+    p = project(CHAIN)
+    _, out = data(capsys, "impact", "low", "--root", str(p.root))
+    rows = [(r["file"], r["depth"]) for r in out["files"]["shown"]]
+    assert rows == [("svc/mid.c", 1), ("app/main.c", 2)]
+    assert out["symbol"] == "low" and out["modules"] == {"svc/": 1, "app/": 1}
+    _, near = data(capsys, "impact", "low", "--depth", "1", "--root", str(p.root))
+    assert near["files"]["total"] == 1
+
+
+def test_impact_up_shows_what_it_rests_on(project, capsys):
+    p = project(CHAIN)
+    _, out = data(capsys, "impact", "app/main.c", "--up", "--root", str(p.root))
+    assert [r["file"] for r in out["files"]["shown"]] == ["svc/mid.c", "drv/low.c"]
+    assert out["direction"] == "up"
+
+
+def test_impact_under_psect_says_what_the_build_makes_again(project, capsys):
+    p = project(NET)
+    deps_json(p)
+    capsys.readouterr()
+    assert psect(["map", "impact", "net/rx.c", "--json", "--root", str(p.root)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["build"]["objects"] == ["o/rx.o"] and out["build"]["archives"] == ["lib/net.a"]
+
+
+def test_impact_of_a_name_with_no_one_definition_stops(project, capsys):
+    p = project({"a.c": b"static int f(void) { return 0; }\n"})
+    assert main(["impact", "f", "--root", str(p.root)]) == 1
+    assert "no one definition" in capsys.readouterr().err
+
+
+def test_who_finds_what_is_defined_at_a_line(project, capsys):
+    p = project({"a.c": b"int one(void) { return 0; }\n\nint two(void) {\n  return 0;\n}\n"})
+    _, out = data(capsys, "who", "a.c:4", "--root", str(p.root))
+    assert out["name"] == "two" and out["at"] == "a.c:4"
+    assert main(["who", "a.c:0", "--root", str(p.root)]) == 1
+
+
+def test_who_says_how_sure_and_can_give_editor_links(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "who", "ring_put", "--links", "--root", str(p.root))
+    assert out["confidence"] == "likely"
+    link = out["users"]["shown"][0]["link"]
+    assert link.startswith("vscode://file/") and link.endswith("net/rx.c:2")
+
+
+def test_a_compiler_backed_index_can_say_confirmed():
+    t = build(Index(files={"a.c": entry(("f", False)), "b.c": entry(refs=["f"])}, confirmed=True))
+    assert Map(t).symbol("f", 5)["confidence"] == "confirmed"
+    assert Map(t).confidence()["confirmed"] == 1
+
+
+CLASSES = {**NET, "vendor/v.c": b"int v;\n", "gen/g.c": b"int g;\n", "tests/t.c": b"int t;\n"}
+
+
+def test_files_get_a_class_and_a_project_can_add_its_own():
+    found = classify(["vendor/a.c", "gen/b.c", "x/tests/c.c", "net/d.c", "e.c"],
+                     {"comm": ["net/*"]})
+    assert found == {"vendor/a.c": "third_party", "gen/b.c": "generated", "x/tests/c.c": "test",
+                     "net/d.c": "comm", "e.c": "product"}
+
+
+def test_a_filter_takes_classes_out_and_says_so(project, capsys):
+    p = project(CLASSES)
+    _, out = data(capsys, "--hide", "third_party,test", "--root", str(p.root))
+    assert out["files"] == 5 and out["hidden"] == {"third_party": 1, "test": 1}
+    _, only = data(capsys, "--only", "generated", "--root", str(p.root))
+    assert only["files"] == 1 and only["hidden"]["product"] == 4
+    assert main(["--only", "nope", "--root", str(p.root)]) == 1
+
+
+def test_overview_counts_uses_by_how_sure(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "--root", str(p.root))
+    assert out["confidence"]["likely"] == 4 and out["confidence"]["ambiguous"] == 0
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    assert "uses by certainty: likely 4" in capsys.readouterr().out
+
+
+def test_grouping_by_output_needs_the_build(project, capsys):
+    p = project(NET)
+    assert psect(["map", "--by-out", "--root", str(p.root)]) == 1
+    assert "psect deps" in capsys.readouterr().err
+    assert main(["--by-out", "--root", str(p.root)]) == 1
+
+
+def test_grouping_by_output(project, capsys):
+    p = project(NET)
+    graph = {"version": 1,
+             "objects": {"o/r.o": {"source": "net/rx.c"}, "o/t.o": {"source": "util/ring.c"}},
+             "archives": {}, "outs": {"a.out": {"objects": ["o/r.o", "o/t.o"]},
+                                      "b.out": {"objects": ["o/t.o"]}}}
+    (p.root / ".printsect" / "deps.json").write_text(json.dumps(graph), encoding="utf-8")
+    capsys.readouterr()
+    assert psect(["map", "--by-out", "--json", "--root", str(p.root)]) == 0
+    names = {m["name"] for m in json.loads(capsys.readouterr().out)["modules"]["shown"]}
+    assert names == {"a.out", "a.out+b.out"}
+
+
+def tangled(p_files=8):
+    files = {}
+    for i in range(p_files):
+        files[f"a/u{i}.c"] = entry((f"au{i}", False), refs=[f"bu{i}"])
+        files[f"b/u{i}.c"] = entry((f"bu{i}", False), refs=[f"au{i}"])
+    return Map(build(Index(files=files)))
+
+
+def test_issues_finds_tangled_pairs():
+    out = issues(tangled(), [], 10)
+    assert out["mutual"]["shown"] == [{"a": "a/", "b": "b/", "a_uses_b": 8, "b_uses_a": 8}]
+    assert not out["layers_set"]
+
+
+def test_issues_finds_links_against_the_layers(project, capsys):
+    p = project({**CHAIN, "drv/bad.c": b"int bad(void) { return mid(); }\n"},
+                config="map:\n  layers: ['app/*', 'svc/*', 'drv/*']\n")
+    _, out = data(capsys, "issues", "--root", str(p.root))
+    assert out["against_layers"]["shown"][0]["user"] == "drv/bad.c"
+    assert out["single_use_links"]["total"] >= 1
+    capsys.readouterr()
+    main(["issues", "--root", str(p.root)])
+    assert "drv/bad.c -> svc/mid.c" in capsys.readouterr().out
+
+
+def test_issues_says_layers_were_not_checked(project, capsys):
+    p = project(CHAIN)
+    capsys.readouterr()
+    main(["issues", "--root", str(p.root)])
+    assert "not checked" in capsys.readouterr().out
+
+
+def test_a_snapshot_shows_what_changed(project, capsys):
+    p = project(CHAIN)
+    assert main(["save", "--root", str(p.root)]) == 0
+    (p.root / "app" / "main.c").write_bytes(b"int main(void) { return other(); }\n")
+    os.utime(p.root / "app" / "main.c", ns=(1, 1))
+    (p.root / "app" / "extra.c").write_bytes(b"int x;\n")
+    _, out = data(capsys, "diff", "--root", str(p.root))
+    assert out["new_links"]["shown"] == [{"from": "app/", "to": "drv/", "count": 1}]
+    assert out["gone_links"]["shown"] == [{"from": "app/", "to": "svc/", "count": 1}]
+    assert out["files_added"]["shown"] == ["app/extra.c"]
+
+
+def test_a_snapshot_finds_a_new_cycle(project, capsys):
+    p = project(CHAIN)
+    main(["save", "--root", str(p.root)])
+    (p.root / "drv" / "low.c").write_bytes(b"int low(void) { return mid(); }\n")
+    os.utime(p.root / "drv" / "low.c", ns=(1, 1))
+    _, out = data(capsys, "diff", "--root", str(p.root))
+    assert out["new_cycles"]["shown"] == [["drv/", "svc/"]]
+
+
+@pytest.mark.parametrize("name", ["../x", "a/b", "a b", "C:x"])
+def test_a_snapshot_name_cannot_leave_the_state_folder(project, capsys, name):
+    p = project(CHAIN)
+    assert main(["save", name, "--root", str(p.root)]) == 1
+
+
+@pytest.mark.parametrize("saved", [
+    "not json", "[]", '{"version": 99}',
+    '{"version":1,"files":["a\\u001b.c"],"edges":[],"cycles":[],"modules":{},"unresolved":0}',
+    '{"version":1,"files":[],"edges":[[1,2,3]],"cycles":[],"modules":{},"unresolved":0}',
+])
+def test_a_snapshot_that_is_not_ours_is_refused(project, capsys, saved):
+    p = project(CHAIN)
+    (p.root / ".printsect" / "map.last.snapshot.json").write_text(saved, encoding="utf-8")
+    assert main(["diff", "--root", str(p.root)]) == 1
+    assert "psect-map save" in capsys.readouterr().err
+
+
+def test_diff_without_a_snapshot_says_so(project, capsys):
+    p = project(CHAIN)
+    assert main(["diff", "--root", str(p.root)]) == 1
+    assert "psect-map save" in capsys.readouterr().err
+
+
+def test_summary_says_what_to_read_first_and_what_it_covers(project, capsys):
+    p = project({**CHAIN, "vendor/v.c": b"int vv(void) { return 0; }\n",
+                 "svc/use.c": b"int use(void) { return vv(); }\n"})
+    _, out = data(capsys, "summary", "--near", "low", "--root", str(p.root))
+    assert out["entrances"][0]["module"] == "app/"
+    assert out["scope"]["files"] == 6 and "contact" in out["note"]
+    assert out["classes"]["third_party"] == 1
+    assert out["product_uses_of_others"] == {"third_party": 1}
+    assert out["way_in"] == ["app/main.c", "svc/mid.c", "drv/low.c"]
+    assert out["widest_reach"][0]["reach"] >= 1
+    capsys.readouterr()
+    main(["summary", "--root", str(p.root)])
+    text = capsys.readouterr().out
+    assert "entrances:" in text and "left out:" in text
+
+
+def test_the_agent_gets_the_new_answers_without_approval(project):
+    p = project(CHAIN)
+    names = {"map_impact", "map_issues", "map_summary", "map_save", "map_diff"}
+    assert names <= set(BY_NAME) and not names & RUNS_SETTINGS
+    for tool, arguments in (("map_impact", {"name": "low"}), ("map_issues", {}),
+                            ("map_summary", {}), ("map_save", {}), ("map_diff", {})):
+        text, is_error = call(BY_NAME[tool], arguments, str(p.root))
+        assert not is_error, text
+
+
+def test_psect_gives_the_page_the_map_on_the_same_paths(project, capsys):
+    p = project(NET)
+    deps_json(p)
+    page = p.root / ".printsect" / "deps.html"
+    assert psect(["deps", "html", "--no-open", "--root", str(p.root)]) == 0
+    text = page.read_text(encoding="utf-8")
+    assert '"map":{"modules":{' in text and '["net/tx.c","util/ring.c",["ring_put"]]' in text
+
+
+def test_a_public_copy_masks_the_map_too(project, capsys):
+    p = project(NET, config="public:\n  mask: [ring]\n")
+    deps_json(p)
+    assert psect(["deps", "html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    text = (p.root / ".printsect" / "deps.public.html").read_text(encoding="utf-8")
+    data_part = text[text.index('id="data">'):text.index("</script>", text.index('id="data">'))]
+    assert "ring" not in data_part and '"map":{"modules":{' in data_part
 
 
 def test_an_unknown_module_names_the_nearest(project, capsys):

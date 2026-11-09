@@ -51,11 +51,13 @@ class Index:
     unreadable: int = 0
     links: int = 0
     excluded: int = 0  # files and folders map.exclude took out
+    confirmed: bool = False  # names were matched by a compiler, not by shape alone
 
 
 @register("indexer", "scan")
 class ScanIndexer:
-    SETTINGS = {"exclude": list, "extensions": list, "encodings": list}
+    SETTINGS = {"exclude": list, "extensions": list, "encodings": list, "classes": dict,
+                "layers": list}
 
     def __init__(self, settings: dict[str, Any]) -> None:
         self.exclude = [str(p).replace("\\", "/").rstrip("/")

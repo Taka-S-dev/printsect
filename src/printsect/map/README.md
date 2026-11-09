@@ -32,10 +32,15 @@ shortest way round each and the symbols on it. It says `cycles: none` when there
 |---|---|
 | `psect-map` | The whole picture: modules with most users first, and who uses whom |
 | `psect-map focus MODULE` | One module, archive or any folder: who uses it and through which symbols, what it uses, what is inside, and each file's place (`entry` = used from outside) |
-| `psect-map who NAME` | Who uses one function, variable or file: where it is defined, each using file with its lines, and why when the name has several definitions |
+| `psect-map who NAME` | Who uses one function, variable or file (or what is defined at `FILE:LINE`): where it is defined, each using file with its lines, how sure, and why when the name has several definitions. `--links` adds links that open each use in VS Code |
+| `psect-map impact NAME` | What a change to a function, variable or file can reach, level by level, and under `psect map` what the build makes again. `--up` is what it rests on, `--depth N` stops early |
+| `psect-map issues` | Cycles, tangled pairs, modules used by or using many, links against `map.layers`, single-use links. Places to look, not verdicts |
+| `psect-map summary` | What to read first: central modules, entrances, widest reach, most unresolved, class of the code. `--near NAME` also gives the way in to it |
+| `psect-map save [NAME]`, `psect-map diff [NAME]` | Keep the map now, then see new and gone links, grown modules, new cycles, unresolved uses and files added or removed |
 
 All take `--top N` (rows per list, 30 by default; what is cut is counted), `--by-dir`
-(group by folder even when archives are known), `--json` and `--root DIR`. Each symbol
+(group by folder even when archives are known), `--by-out` (by final output, under `psect map`),
+`--only` and `--hide` (classes of code), `--json` and `--root DIR`. Each symbol
 comes with the file and line that define it.
 
 ## What is counted
@@ -54,6 +59,14 @@ Modules are the top folders, with the heaviest split so that a big folder is sho
 its parts; a folder that gave up a part stands for what remains. Under `psect map`,
 once `psect deps` has read the build, a module is an archive, and files the build does
 not use are left out, which also settles most names defined for several platforms.
+
+Every file has a class, by path: `third_party`, `generated`, `test`, `build_script`, `platform`
+or `product`. Your own classes in `map.classes` go first, and can be anything, such as
+`comm` or `ui`. What a filter takes out is counted in the answer.
+
+A use is `likely`: matched by name, and only one definition fits. `ambiguous` has several
+definitions, `unresolved` has none it can reach. `confirmed` is left for an index backed by a
+compiler (a plugin that sets `Index.confirmed`); this one only reads the shape of the code.
 
 ## What it cannot see
 
@@ -80,6 +93,8 @@ map:
   exclude: ["third_party/*", "tests/*"]    # patterns over paths from the project root
   extensions: [.c, .cc, .cpp, .cxx]
   encodings: [utf-8, cp932]
+  classes: {comm: ["net/*", "*/net/*"], ui: ["ui/*"]}   # first match holds, before the built-in
+  layers: ["app/*", "service/*", "driver/*"]             # top first, for psect-map issues
 ```
 
 Folders starting with `.` are skipped, links are not followed, and a file over 4 MB
@@ -103,6 +118,7 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | File | Use |
 |---|---|
 | `.printsect/map.json` | What each file defines and uses, so only changed files are read again |
+| `.printsect/map.NAME.snapshot.json` | What `psect-map save` kept |
 
 ## Inside
 
@@ -113,3 +129,4 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | `index.py` | The builtin indexer: walking the project, and the saved index |
 | `model.py` | From the index to modules, roles, and the answers |
 | `cycles.py` | Finding the loops among modules |
+| `analysis.py` | Reach, strain, snapshots and the first summary |

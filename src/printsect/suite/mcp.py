@@ -197,6 +197,24 @@ TOOLS = [
                           "by_dir": _b("group by folder even when archives are known")},
          ("name",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
          positional=("name",)),
+    Tool("map_impact", "What a change to a function, variable or file can reach, level by level "
+         "(with up: what it rests on), and what the build makes again.",
+         ["map", "impact"], {"name": _s("a function or variable, or a source file"),
+                             "depth": _i("how many steps (default: all)"),
+                             "up": _b("what it rests on instead"),
+                             "top": _i("rows per list (default 30)")},
+         ("name",), options={"depth": "--depth", "top": "--top"}, switches={"up": "--up"},
+         positional=("name",)),
+    Tool("map_issues", "Where the design looks strained: cycles, tangled modules, modules used "
+         "by or using many, links against map.layers. Places to look, not verdicts.",
+         ["map", "issues"], {"top": _i("rows per list (default 30)")}, options={"top": "--top"}),
+    Tool("map_summary", "What to read first: central modules, entrances, widest reach, what is "
+         "most unresolved, with what the counts cover.",
+         ["map", "summary"], {"near": _s("also the way in to this name or file")},
+         options={"near": "--near"}),
+    Tool("map_save", "Keep the map as it is now, to compare later with map_diff.", ["map", "save"]),
+    Tool("map_diff", "What changed since map_save: new and gone links, grown modules, new "
+         "cycles, unresolved uses, files added and removed.", ["map", "diff"]),
     Tool("deps_scan", "Read the build: once before the deps_ tools, and again after a Makefile "
          "or deps settings changed.",
          ["deps"]),
