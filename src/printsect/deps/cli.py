@@ -252,8 +252,8 @@ def cmd_html(args: argparse.Namespace) -> int:
     said = f"wrote {path}" + (" (opened in the browser)" if opened else "")
     if report:
         said += ("\nmasked: {names} name(s), {absolute_paths} absolute path(s), "
-                 "{files_hidden} file name(s) hidden; commands, probe notes and reasons "
-                 "left out").format(**report)
+                 "{files_hidden} file name(s) hidden, {targets} deploy target(s) replaced; "
+                 "commands, probe notes and reasons left out").format(**report)
     out(args, {"file": str(path), "opened": opened, "masked": report}, said)
     return 0
 
@@ -261,8 +261,8 @@ def cmd_html(args: argparse.Namespace) -> int:
 def _public_page(args: argparse.Namespace, proj: Project,
                  graph: Graph) -> tuple[str, dict[str, int]]:
     """The page with the names taken out, or an error if something would still go out."""
-    from .html import embedded, page_data, render_data
-    from .public import Masker, leaks, mask_graph, mask_map
+    from .html import page_data, render_data
+    from .public import Masker, leaks, mask_graph, mask_map, project_text
 
     settings = proj.settings.get("public") or {}
     names = [*(settings.get("mask") or []), *args.deps_mask_names(proj), proj.root.name]
@@ -277,9 +277,10 @@ def _public_page(args: argparse.Namespace, proj: Project,
                      public="placeholder")
     report = masker.report()
     data["public"] = (f"{report['names']} names masked, {report['absolute_paths']} absolute "
-                      f"paths replaced, {report['files_hidden']} file names hidden; commands "
-                      "and notes left out.")
-    found = leaks(embedded(data), masker.names, proj.root.as_posix())
+                      f"paths replaced, {report['files_hidden']} file names hidden, "
+                      f"{report['targets']} deploy targets replaced; commands and notes left out.")
+    # The name of the project's folder masks as any other, but "project" is the page's own.
+    found = leaks(project_text(data), masker.names, proj.root.as_posix())
     if found:
         raise PsectError("not written: this would still go out: " + "; ".join(found)
                          + ". Add what is wrong to public.mask, or use --hide-sources")

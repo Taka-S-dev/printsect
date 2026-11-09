@@ -16,6 +16,7 @@ from .graph import Graph
 
 _ABSOLUTE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/])")
 _DRIVE_OR_HOME = re.compile(r"[A-Za-z]:[\\/][^\"\s,]*|(?:/home|/Users|/mnt|/opt|/srv)/[^\"\s,]+")
+_SUFFIX = re.compile(r"\.[A-Za-z0-9+]{1,8}$")
 _SECRET = re.compile(r"(?i)\b(?:password|passwd|secret|token|api[_-]?key)\b\s*[=:]\s*[^\s\",]+")
 
 
@@ -34,6 +35,8 @@ class Masker:
                       if self.names else None)
         self._by_lower = {n.lower(): self._labels[n] for n in self.names}
         self._files: dict[str, str] = {}
+        self._modules: dict[str, str] = {}
+        self._targets: dict[str, str] = {}
 
     def _one(self, match: re.Match[str]) -> str:
         self.counts["names"] += 1
@@ -54,15 +57,28 @@ class Masker:
             return self.path(value)
         if value not in self._files:
             self.counts["files_hidden"] += 1
-            dot = value.rfind(".")
-            self._files[value] = f"file-{len(self._files) + 1}" + (value[dot:] if dot > 0 else "")
+            # From the last part of the path only, and only if it looks like a suffix:
+            # "acme.board/rx" must not give away "acme.board/rx".
+            suffix = _SUFFIX.search(re.split(r"[\\/]", value)[-1])
+            self._files[value] = f"file-{len(self._files) + 1}" + (suffix.group() if suffix else "")
         return self._files[value]
+
+    def module(self, value: str) -> str:
+        """A module of the map: folders and archives name the code as much as files do."""
+        if not self.hide_sources:
+            return self.path(value)
+        return self._modules.setdefault(value, f"module-{len(self._modules) + 1}")
+
+    def target(self, value: str) -> str:
+        """Where something is deployed: hosts and paths on a target, never handed on."""
+        self.counts["targets"] += value not in self._targets
+        return self._targets.setdefault(value, f"target-{len(self._targets) + 1}")
 
     def symbols(self, names: list[str]) -> list[str]:
         return [] if self.hide_sources else [self.text(n) for n in names]
 
     def report(self) -> dict[str, int]:
-        return {k: self.counts[k] for k in ("names", "absolute_paths", "files_hidden")}
+        return {k: self.counts[k] for k in ("names", "absolute_paths", "files_hidden", "targets")}
 
 
 def mask_graph(graph: Graph, masker: Masker) -> Graph:
@@ -76,7 +92,9 @@ def mask_graph(graph: Graph, masker: Masker) -> Graph:
     return Graph(
         objects={f(o): {"source": f(i["source"]) if i.get("source") else None,
                         "headers": [f(h) for h in i.get("headers", [])],
-                        "include_dirs": [p(d) for d in i.get("include_dirs", [])], **kept(i)}
+                        "include_dirs": ([] if masker.hide_sources
+                                         else [p(d) for d in i.get("include_dirs", [])]),
+                        **kept(i)}
                  for o, i in graph.objects.items()},
         archives={p(a): {"objects": [f(o) for o in i.get("objects", [])],
                          **({"prebuilt": True} if i.get("prebuilt") else {}), **kept(i)}
@@ -90,16 +108,41 @@ def mask_graph(graph: Graph, masker: Masker) -> Graph:
         made={f(g): {"from": [f(x) for x in i.get("from", [])],
                      **({"by": f(i["by"])} if i.get("by") else {})}
               for g, i in graph.made.items()},
-        copies={masker.path(t): p(s) if (s in graph.outs or s in graph.archives) else f(s)
+        copies={masker.target(t): p(s) if (s in graph.outs or s in graph.archives) else f(s)
                 for t, s in graph.copies.items()},
         excluded={f(x): "left out by a setting" for x in graph.excluded},
     )
 
 
 def mask_map(data: dict[str, Any], masker: Masker) -> dict[str, Any]:
-    return {"modules": {masker.file(k): masker.path(v) for k, v in data["modules"].items()},
+    return {"modules": {masker.file(k): masker.module(v) for k, v in data["modules"].items()},
             "edges": [[masker.file(a), masker.file(b), masker.symbols(s)]
                       for a, b, s in data["edges"]]}
+
+
+# The parts of a page that come from the project; the rest is the page's own vocabulary,
+# where a short name to mask ("ui") would be found inside a word like "build".
+_FROM_THE_PROJECT = ("name", "paths", "copies", "excluded", "map", "probes", "public")
+
+
+def project_text(data: dict[str, Any]) -> str:
+    found: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            found.append(value)
+        elif isinstance(value, dict):
+            for key, inner in value.items():
+                if key not in ("modules", "edges"):  # the map's own two fields
+                    found.append(str(key))
+                walk(inner)
+        elif isinstance(value, list):
+            for inner in value:
+                walk(inner)
+
+    for key in _FROM_THE_PROJECT:
+        walk(data.get(key))
+    return "\n".join(found)
 
 
 def leaks(text: str, names: list[str], root: str) -> list[str]:
