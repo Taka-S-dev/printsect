@@ -212,6 +212,10 @@ def test_who_a_definition_not_used_in_its_file_is_not_a_user(project, capsys):
     p = project({"a.c": b"int f(void) { return 0; }\n"})
     _, out = data(capsys, "who", "f", "--root", str(p.root))
     assert out["users"] == {"shown": [], "total": 0}
+    assert "header's macro" in out["not_seen"]  # none found is not none there
+    capsys.readouterr()
+    main(["who", "f", "--root", str(p.root)])
+    assert "not seen: calls through a function pointer" in capsys.readouterr().out
 
 
 def test_who_cuts_files_and_lines(project, capsys):

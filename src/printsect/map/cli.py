@@ -189,6 +189,8 @@ def _who_text(data: dict[str, Any]) -> str:
                          "and cannot reach a static")
     if more := _more(users):
         lines.append(more)
+    if data["kind"] == "symbol":
+        lines.append(f"not seen: {data['not_seen']}")
     return "\n".join(lines)
 
 

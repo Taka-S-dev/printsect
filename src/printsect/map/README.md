@@ -63,7 +63,8 @@ It reads the shape of the code, without a compiler:
 - `#if` is not evaluated, except `#if 0`: both branches count, so a cycle may join
   code that is never built together.
 - A function or variable whose name a macro makes is not found (counted as "named by a macro").
-- A call made inside a header's macro is seen as the macro's name, not the function's.
+- A call made inside a header's macro is seen as the macro's name, not the function's,
+  so `who` can list fewer users than there are, even none. Its answer says so.
 - A local variable with the same name as another file's global counts as a use of it.
 
 Measured on OpenSSL 1.1.1q against a map made from a GNU Global index of the same

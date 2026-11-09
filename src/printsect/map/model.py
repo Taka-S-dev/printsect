@@ -26,6 +26,8 @@ MAX_GROUPS = 40
 SYMBOLS_SHOWN = 5
 LINES_SHOWN = 10
 KINDS = {"f": "function", "v": "variable"}
+# With every answer about a name: "used by (0)" must not read as "nothing calls this".
+NOT_SEEN = "calls through a function pointer or inside a header's macro"
 
 LinesIn = Callable[[str, str], list[int]]  # (file, name) -> the lines using it
 
@@ -307,7 +309,7 @@ class Map:
         return {"kind": "symbol", "name": name, "status": status,
                 "defined": _capped(defined, top), "users": listed,
                 "cannot_reach": len(users) if status == "static" else 0,
-                "grouped_by": self.grouped_by}
+                "not_seen": NOT_SEEN, "grouped_by": self.grouped_by}
 
     def files_named(self, name: str) -> list[str]:
         """The files a typed path means: the exact one, or those ending with it."""
