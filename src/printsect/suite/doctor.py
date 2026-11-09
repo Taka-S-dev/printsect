@@ -35,11 +35,11 @@ class Finding:
 
 
 def all_sections() -> Schema:
-    from .. import console, deploy, deps, map, probe
+    from .. import console, deploy, deps, knowledge, map, probe
     from .run import SECTIONS
 
     return {**CORE_SCHEMA, **console.SECTIONS, **deps.SECTIONS, **probe.SECTIONS,
-            **deploy.SECTIONS, **map.SECTIONS, **SECTIONS}
+            **deploy.SECTIONS, **map.SECTIONS, **knowledge.SECTIONS, **SECTIONS}
 
 
 def _check_console(settings: Any) -> object:

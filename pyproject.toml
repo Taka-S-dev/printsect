@@ -16,6 +16,7 @@ psect-probe = "printsect.probe.cli:main"
 psect-deploy = "printsect.deploy.cli:main"
 psect-console = "printsect.console.cli:main"
 psect-map = "printsect.map.cli:main"
+psect-knowledge = "printsect.knowledge.cli:main"
 
 [project.optional-dependencies]
 # The serial console opens a COM port itself; not needed when another program holds it.

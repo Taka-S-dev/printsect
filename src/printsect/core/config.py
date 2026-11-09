@@ -58,6 +58,16 @@ CORE_SCHEMA: Schema = {"version": int, "marker": {"prefix": str}, "devices": dic
 LANGS = ("en", "ja")
 
 
+def user_folder() -> Path:
+    """The user's own printsect folder (never inside a project)."""
+    if os.environ.get("PSECT_CONFIG_DIR"):
+        return Path(os.environ["PSECT_CONFIG_DIR"])
+    if os.name == "nt" and os.environ.get("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "printsect"
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "printsect"
+
+
 def language(asked: str | None = None, settings: dict[str, Any] | None = None) -> str:
     """The language to use: asked (--lang), else PSECT_LANG, else lang: in the settings,
     else English."""

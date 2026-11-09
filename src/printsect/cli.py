@@ -94,6 +94,9 @@ def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
                 names.extend(n for n in hit[key] if n not in names)
     except (PsectError, AttributeError, TypeError, KeyError):
         return None
+    # The reading may have come with the project, and its names reach terminals and agents.
+    if any(not (isinstance(n, str) and n.isprintable()) for ns in found.values() for n in ns):
+        return None
     return found
 
 
@@ -104,7 +107,16 @@ def _page_map(proj: Project) -> dict[str, Any] | None:
 
 
 def _knowledge_names(proj: Project) -> list[str]:
-    return []
+    from .knowledge import load_knowledge
+
+    return load_knowledge(proj).mask
+
+
+def _knowledge_rules(proj: Project) -> dict[str, Any]:
+    from .knowledge import load_knowledge
+
+    found = load_knowledge(proj)
+    return {"classes": found.classes, "layers": found.layers}
 
 
 def _warn_probe_in_untraced_header(proj: Project, probe: Any) -> list[str]:
@@ -182,15 +194,16 @@ TOOLS = {
     "probe": "psect-probe",
     "deploy": "psect-deploy",
     "map": "psect-map",
+    "knowledge": "psect-knowledge",
 }
 
 
 def _run_sections() -> Schema:
-    from . import console, deploy, deps, map, probe
+    from . import console, deploy, deps, knowledge, map, probe
     from .suite.run import SECTIONS
 
     return {**console.SECTIONS, **deps.SECTIONS, **probe.SECTIONS, **deploy.SECTIONS,
-            **map.SECTIONS, **SECTIONS}
+            **map.SECTIONS, **knowledge.SECTIONS, **SECTIONS}
 
 
 def _ask_here(args: argparse.Namespace) -> Callable[[str], str | None] | None:
@@ -445,6 +458,7 @@ def build_parser() -> argparse.ArgumentParser:
     from .console import cli as console_cli
     from .deploy import cli as deploy_cli
     from .deps import cli as deps_cli
+    from .knowledge import cli as knowledge_cli
     from .map import cli as map_cli
     from .probe import cli as probe_cli
 
@@ -521,7 +535,10 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser("map", parents=[common()],
                        help="which module uses which (reads the source, runs nothing)"),
         modules=_archive_modules, marks=_probe_marks, outputs=_output_modules,
-        builds=_map_builds)
+        builds=_map_builds, rules=_knowledge_rules)
+    knowledge_cli.configure(
+        sub.add_parser("knowledge", parents=[common()],
+                       help="what is known about this build, read as data from your files"))
     return parser
 
 

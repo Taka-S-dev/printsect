@@ -12,6 +12,7 @@ printsect は小さなツールの集まりです。一度入れれば、各ツ�
 | probe | `psect-probe` | `psect probe` | C のソースにプリントのプローブを入れ、どこに・なぜ入れたかの一覧を持ち、自分が入れたものだけを取り除く。 | [probe](src/printsect/probe/README.ja.md) |
 | console | `psect-console` | `psect console` | 対象機器の出力を行ごとに読み、コマンドを送り、特定の行を待つ。シリアルポートを自分で開くか、すでにポートを開いているプログラムを通して（TCP、そのコマンドライン、そのログファイル）。 | [console](src/printsect/console/README.ja.md) |
 | map | `psect-map` | `psect map` | C のプロジェクトで、どのモジュールがどれを使っているか。ビルドもほかのプログラムも使わずソースから読み、エージェントが最初に読める短さで出す。 | [map](src/printsect/map/README.ja.md) |
+| knowledge | `psect-knowledge` | `psect knowledge` | ビルドについて知っていること（コードの分類、層、伏せる名前、メモ）を自分のファイルに置き、データとして読む | [README](src/printsect/knowledge/README.ja.md) |
 | deploy | `psect-deploy` | `psect deploy` | ビルドを設定どおりに対象機器へ載せる（コマンド、FTP、または人の作業）。 | [deploy](src/printsect/deploy/README.ja.md) |
 
 ツール同士をどう分けているか、ツールの足し方：[core](src/printsect/core/README.ja.md)。

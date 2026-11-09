@@ -30,7 +30,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from ..core.config import Project
+from ..core.config import Project, user_folder
 from ..core.fsutil import write_atomic
 from ..core.timeutil import now
 
@@ -39,13 +39,7 @@ SECTIONS = ("deps", "build", "deploy", "console", "reproduce")
 
 
 def _store() -> pathlib.Path:
-    """The user's own printsect folder (never inside a project)."""
-    if os.environ.get("PSECT_CONFIG_DIR"):
-        return pathlib.Path(os.environ["PSECT_CONFIG_DIR"])
-    if os.name == "nt" and os.environ.get("APPDATA"):
-        return pathlib.Path(os.environ["APPDATA"]) / "printsect"
-    base = os.environ.get("XDG_CONFIG_HOME") or str(pathlib.Path.home() / ".config")
-    return pathlib.Path(base) / "printsect"
+    return user_folder()
 
 
 def _key(create: bool) -> bytes | None:

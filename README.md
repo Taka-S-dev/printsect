@@ -13,6 +13,7 @@ of them together through `psect`.
 | probe | `psect-probe` | `psect probe` | Put print probes into C source, keep a list of where they are and why, and take out only the ones it put in. | [probe](src/printsect/probe/README.md) |
 | console | `psect-console` | `psect console` | Read what the target prints, line by line, send it commands, and wait for a line. Opens a serial port itself, or goes through the program that already holds it (TCP, its command line, or its log file). | [console](src/printsect/console/README.md) |
 | map | `psect-map` | `psect map` | Which module of a C project uses which, read from the source without a build or any other program, short enough for an agent to read first. | [map](src/printsect/map/README.md) |
+| knowledge | `psect-knowledge` | `psect knowledge` | What you know about your build (classes of code, layers, names to mask, notes), kept in your own files and read as data | [README](src/printsect/knowledge/README.md) |
 | deploy | `psect-deploy` | `psect deploy` | Put the build on the target the way the config says (a command, FTP, or a person doing it). | [deploy](src/printsect/deploy/README.md) |
 
 How the tools are kept apart, and how to add one: [core](src/printsect/core/README.md).

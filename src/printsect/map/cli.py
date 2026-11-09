@@ -64,6 +64,10 @@ def no_builds(project: Project, files: list[str]) -> dict[str, Any] | None:
     return None
 
 
+def no_rules(project: Project) -> dict[str, Any]:
+    return {}
+
+
 def _list(text: str | None) -> list[str]:
     return [t.strip() for t in (text or "").split(",") if t.strip()]
 
@@ -88,7 +92,12 @@ def _map(args: argparse.Namespace) -> Map:
     indexer = make_indexer(settings)
     index = indexer.index(proj, lambda text: print(text, file=sys.stderr))
     args.map_project = proj
-    classes = classify(index.files, settings.get("classes") or {})
+    rules = args.map_rules(proj)
+    # What the settings say comes before what a knowledge file says.
+    classes = classify(index.files, {**(settings.get("classes") or {}),
+                                     **{k: v for k, v in rules.get("classes", {}).items()
+                                        if k not in (settings.get("classes") or {})}})
+    args.map_layers = settings.get("layers") or rules.get("layers") or []
     args.map_classes = classes
     only, hide = set(_list(args.only)), set(_list(args.hide))
     for wanted in only | hide:
@@ -328,7 +337,7 @@ def cmd_impact(args: argparse.Namespace) -> int:
     code_map = _map(args)
     files, symbol = _start(code_map, args.name)
     data = impact(code_map, files, symbol, args.depth, args.up, args.top)
-    build = args.map_builds(args.map_project, files)
+    build = None if args.no_build_info else args.map_builds(args.map_project, files)
     if build:
         data["build"] = build
     out(args, data, _impact_text(data))
@@ -347,8 +356,7 @@ def _pairs(title: str, section: dict[str, Any], row: Callable[[dict[str, Any]], 
 
 def cmd_issues(args: argparse.Namespace) -> int:
     code_map = _map(args)
-    layers = (args.map_project.settings.get("map") or {}).get("layers") or []
-    data = issues(code_map, [str(x) for x in layers], args.top)
+    data = issues(code_map, [str(x) for x in args.map_layers], args.top)
     lines = _cycles_text(data["cycles"])
     lines += _pairs("tangled pairs (each uses the other)", data["mutual"],
                     lambda r: f"{r['a']} <-> {r['b']}  {r['a_uses_b']} / {r['b_uses_a']}")
@@ -485,13 +493,15 @@ def _positive(text: str) -> int:
 
 def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None,
               marks: Marks | None = None, outputs: Modules | None = None,
-              builds: Builds | None = None) -> None:
+              builds: Builds | None = None,
+              rules: Callable[[Project], dict[str, Any]] | None = None) -> None:
     """Add the map options and actions to `parser` (which already has --json/--root).
 
     `modules(project)` gives {source file: module}, the files the build uses, or None;
     `marks(project)` gives {file: [{"n": 7, ...}]} to show where probes are.
     `outputs(project)` gives {source file: output} for --by-out;
-    `builds(project, files)` gives what the build makes again from them.
+    `builds(project, files)` gives what the build makes again from them;
+    `rules(project)` gives {"classes": ..., "layers": ...} to use beside the settings.
     """
     from . import SECTIONS
 
@@ -505,7 +515,8 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
     parser.add_argument("--hide", metavar="CLASSES", help="leave these classes out (a,b)")
     parser.set_defaults(func=cmd_overview, map_modules=modules or no_modules,
                         map_marks=marks or no_marks, map_outputs=outputs or no_outputs,
-                        map_builds=builds or no_builds, sections=SECTIONS)
+                        map_builds=builds or no_builds, map_rules=rules or no_rules,
+                        sections=SECTIONS)
     below = common_below()
     below.add_argument("--top", type=_positive, default=argparse.SUPPRESS, metavar="N",
                        help="rows per list")
@@ -533,6 +544,7 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
                    help="how many steps (default: all)")
     p.add_argument("--up", action="store_true",
                    help="what it rests on, rather than what it reaches")
+    p.add_argument("--no-build-info", action="store_true", help=argparse.SUPPRESS)  # agents
     p.set_defaults(func=cmd_impact)
     p = sub.add_parser("issues", parents=[below],
                        help="cycles, tangled modules, links against layers")
