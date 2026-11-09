@@ -15,7 +15,7 @@ from typing import Any
 from ..core.config import Project
 from ..core.errors import PsectError
 from ..core.timeutil import now
-from .graph import ARCHIVE, GRAPH_VERSION, IMPORTED, OUT, Graph
+from .graph import ARCHIVE, GRAPH_VERSION, IMPORTED, OUT, SCRIPT, STATUSES, Graph
 
 _NOT_IN_A_PATH = re.compile(r"[\x00-\x1f\x7f-\x9f:]")  # terminals, and C: or a stream
 
@@ -55,18 +55,35 @@ def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
     return section
 
 
+def _status(fields: dict[str, Any], info: dict[str, Any], where: str) -> dict[str, Any]:
+    if "status" in fields:
+        if fields["status"] not in STATUSES:
+            raise PsectError(f"{where}.status: one of {', '.join(STATUSES)}")
+        info["status"] = fields["status"]
+    return info
+
+
+def _label(value: Any, where: str) -> str:
+    """Free text that reaches terminals and pages: printable, one line."""
+    if not (isinstance(value, str) and value and value.isprintable()):
+        raise PsectError(f"{where}: expected plain text, got {value!r}")
+    return value
+
+
 def _object(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"source", "headers"}, where)
+    fields = _mapping(item, {"source", "headers", "status"}, where)
     source = fields.get("source")
     info: dict[str, Any] = {"source": None if source is None else _path(source, f"{where}.source")}
+    _status(fields, info, where)
     if "headers" in fields:
         info["headers"] = _paths(fields, "headers", where)
     return info
 
 
 def _archive(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"objects", "prebuilt", "made_in"}, where)
+    fields = _mapping(item, {"objects", "prebuilt", "made_in", "status"}, where)
     info: dict[str, Any] = {"objects": _paths(fields, "objects", where)}
+    _status(fields, info, where)
     if "prebuilt" in fields:
         if not isinstance(fields["prebuilt"], bool):
             raise PsectError(f"{where}.prebuilt: expected true or false")
@@ -77,12 +94,21 @@ def _archive(item: Any, where: str) -> dict[str, Any]:
 
 
 def _out(item: Any, where: str) -> dict[str, Any]:
-    fields = _mapping(item, {"objects", "archives", "libs", "made_in"}, where)
+    fields = _mapping(item, {"objects", "archives", "libs", "made_in", "status"}, where)
     info: dict[str, Any] = {"objects": _paths(fields, "objects", where),
                             "archives": _paths(fields, "archives", where),
                             "libs": _paths(fields, "libs", where)}
+    _status(fields, info, where)
     if "made_in" in fields:
         info["made_in"] = _path(fields["made_in"], f"{where}.made_in")
+    return info
+
+
+def _made(item: Any, where: str) -> dict[str, Any]:
+    fields = _mapping(item, {"from", "by"}, where)
+    info: dict[str, Any] = {"from": _paths(fields, "from", where)}
+    if "by" in fields:
+        info["by"] = _path(fields["by"], f"{where}.by")
     return info
 
 
@@ -118,6 +144,10 @@ def _check_links(graph: Graph) -> None:
     stuck = sorted(c for c, n in waiting.items() if n)
     if stuck:
         raise PsectError(f"{stuck[0]} is built from itself, directly or through others")
+    for target, source in graph.copies.items():
+        if graph.kind(source) is None and source not in graph.made:
+            raise PsectError(f"{target} is a copy of {source}, which is not listed; "
+                             "add it to objects, archives, outs or made")
 
 
 def read_graph(text: str, project: Project) -> Graph:
@@ -126,7 +156,8 @@ def read_graph(text: str, project: Project) -> Graph:
         loaded = json.loads(text)
     except ValueError as exc:
         raise PsectError(f"the graph file is not JSON: {exc}") from exc
-    data = _mapping(loaded, {"version", "objects", "archives", "outs", "inputs"}, "the graph file")
+    data = _mapping(loaded, {"version", "objects", "archives", "outs", "inputs", "made",
+                             "copies", "excluded"}, "the graph file")
     if data.get("version", GRAPH_VERSION) != GRAPH_VERSION:
         raise PsectError(f"the graph file is version {data['version']!r}; "
                          f"this printsect reads version {GRAPH_VERSION}")
@@ -137,7 +168,13 @@ def read_graph(text: str, project: Project) -> Graph:
 
     graph = Graph(objects=read("objects", _object), archives=read("archives", _archive),
                   outs=read("outs", _out), generated=now(), command=IMPORTED,
-                  inputs=_inputs(data, project))
+                  inputs=_inputs(data, project), default_status=SCRIPT,
+                  made=read("made", _made),
+                  # Where a file is deployed can be off the project: a label, not a path here.
+                  copies={_label(k, "copies"): _path(v, f"copies[{k!r}]")
+                          for k, v in _section(data, "copies").items()},
+                  excluded={_path(k, "excluded"): _label(v, f"excluded[{k!r}]")
+                            for k, v in _section(data, "excluded").items()})
     graph.headers_traced = any("headers" in info for info in graph.objects.values())
     if not graph.objects:
         graph.warnings.append("the graph file lists no objects")

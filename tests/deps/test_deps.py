@@ -324,6 +324,63 @@ def test_a_changed_input_of_a_graph_file_stops_the_build_instead_of_running_make
         load_graph(p, lambda text: None)
 
 
+def test_impact_goes_from_a_header_to_every_output(scanned, capsys):
+    p, _ = scanned
+    capsys.readouterr()
+    assert main(["deps", "impact", "src/inc/com.h", "--json", "--root", str(p.root)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "lib/libnet.a" in out["archives"] or "lib/libdisk.a" in out["archives"]
+    assert set(out["outs"]) == {"build/netdrv.out", "build/disk.out"}
+    assert out["status"] == "inferred"
+
+
+def test_impact_depth_stops_early(scanned, capsys):
+    p, g = scanned
+    near = g.impact("src/net/rx.c", depth=1)
+    assert near["objects"] == ["obj/rx.o"] and near["archives"] == [] and near["outs"] == []
+    far = g.impact("src/net/rx.c")
+    assert far["outs"] == ["build/netdrv.out"]
+    assert main(["deps", "impact", "nothing.c", "--root", str(p.root)]) == 1
+
+
+def test_a_graph_file_says_what_is_made_deployed_left_out_and_how_sure(project, capsys, tmp_path):
+    p = project(FILES)
+    graph = {**GRAPH, "objects": {**GRAPH["objects"], "o/gen.o": {"source": "gen/a.c",
+                                                                  "status": "confirmed"}},
+             "archives": {**GRAPH["archives"], "lib/gen.a": {"objects": ["o/gen.o"]}},
+             "outs": {"out/app.out": {"archives": ["lib/net.a", "lib/gen.a"]}},
+             "made": {"gen/a.c": {"from": ["a.def"], "by": "tools/gen.py"}},
+             "copies": {"target:/lib/app.out": "out/app.out"},
+             "excluded": {"vendor/x.c": "not ours"}}
+    assert from_graph(p, tmp_path, graph) == 0
+    g = load(p)
+    assert g.status_of("o/gen.o") == "confirmed" and g.status_of("lib/net.a") == "script"
+    assert g.status_of("lib/vendor.a") == "unresolved" and g.status_of("o/crt.o") == "unresolved"
+    assert g.status_of("vendor/x.c") == "excluded"
+    capsys.readouterr()
+    assert main(["deps", "impact", "a.def", "--json", "--root", str(p.root)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["made"] == ["gen/a.c"] and out["objects"] == ["o/gen.o"]
+    assert out["outs"] == ["out/app.out"] and out["deployed"] == ["target:/lib/app.out"]
+
+
+@pytest.mark.parametrize(("extra", "said"), [
+    ({"objects": {"a.o": {"status": "sure"}}}, ".status: one of"),
+    ({"copies": {"t\x1b": "a.o"}}, "plain text"),
+    ({"copies": {"t": "no.o"}}, "which is not listed"),
+    ({"made": {"g.c": {"from": "a"}}}, "expected a list"),
+])
+def test_the_extra_parts_of_a_graph_file_are_checked(project, capsys, tmp_path, extra, said):
+    p = project(FILES)
+    assert from_graph(p, tmp_path, extra) == 1
+    assert said in capsys.readouterr().err
+
+
+def test_a_scanned_build_says_where_each_part_came_from(scanned):
+    _, g = scanned
+    assert g.status_of("obj/rx.o") == "build" and g.status_of("src/inc/net.h") == "inferred"
+
+
 def test_doctor_keeps_a_graph_file_and_says_when_it_is_stale(project, tmp_path, monkeypatch):
     def ran(*args, **kwargs):
         raise AssertionError("a command ran")

@@ -27,6 +27,7 @@ build/out/netdrv.out
 | `psect-deps tree [NAME…]` | The tree above. `-s` source names, `--headers` every header, `--probed` only branches with a probe (in `psect deps`) |
 | `psect-deps tree -f PATTERN` | Keep only the way to matching files: text, `*.h`, or `--regex` |
 | `psect-deps which FILE` | What a file is built into (first 20 ways; `--all` for more) |
+| `psect-deps impact FILE` | What a change to it makes again: generated files, objects, archives, outputs and where they are deployed. `--depth N` stops after N steps |
 | `psect-deps find PATTERN` | Files whose path matches; `--quickfix` gives `file:1: chain` for editors |
 | `psect-deps html` | One self-contained page to browse and search in a browser |
 
@@ -98,6 +99,12 @@ nothing, and nothing about that build has to go into printsect.
   "inputs": ["targets.csv"]
 }
 ```
+
+The file can also say how sure it is of a part (`"status"` on an object, archive or output:
+`confirmed`, `build`, `script`, `inferred`, `unresolved`, `excluded`), what generates a file
+(`"made": {"gen/a.c": {"from": ["a.def"], "by": "tools/gen.py"}}`), where an output is deployed
+(`"copies": {"target:/lib/app.out": "build/app.out"}`), and what was left out and why
+(`"excluded": {"vendor/x.c": "not ours"}`). `impact`, the page and every answer use these.
 
 Every path is relative to the project and inside it, and every part named must be listed
 (a prebuilt archive: `{"objects": [], "prebuilt": true}`). `headers` is optional; without

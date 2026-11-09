@@ -3,6 +3,7 @@
     psect-deps                      read the build (make -n) into .printsect/deps.json
     psect-deps tree [-f PATTERN]    outputs -> archives -> sources -> headers
     psect-deps which FILE           what a file is built into
+    psect-deps impact FILE          what a change to it makes again
     psect-deps find PATTERN         files whose path matches
     psect-deps html                 a page to browse and search it in a browser
 
@@ -148,6 +149,27 @@ def cmd_which(args: argparse.Namespace) -> int:
     return 0 if rows else 1
 
 
+def cmd_impact(args: argparse.Namespace) -> int:
+    proj = project(args)
+    graph = _load(args, proj)
+    path = _file_arg(proj, args.file)
+    if not (graph.starts_for(path) or path in graph.made or any(
+            path in [*i.get("from", []), i.get("by")] for i in graph.made.values())):
+        raise PsectError(f"{path} is not part of this build")
+    data = graph.impact(path, args.depth)
+    data["status"] = graph.status_of(path)
+    lines = [f"changing {path} ({data['status']}) makes again:"]
+    for title, key in (("generated", "made"), ("objects", "objects"), ("archives", "archives"),
+                       ("partial links", "parts"), ("outputs", "outs"), ("deployed", "deployed")):
+        if data[key]:
+            lines.append(f"{title} ({len(data[key])}):")
+            lines += [f"  {p}" for p in data[key]]
+    if len(lines) == 1:
+        lines.append("  nothing this build makes")
+    out(args, data, "\n".join(lines))
+    return 0
+
+
 def cmd_find(args: argparse.Namespace) -> int:
     from .graph import HEADER, SOURCE
     from .search import Matcher
@@ -233,6 +255,12 @@ def configure(parser: argparse.ArgumentParser, *, marks: Marks | None = None,
     p.add_argument("file")
     p.add_argument("--all", action="store_true", help="list every way, not the first 20")
     p.set_defaults(func=cmd_which)
+
+    p = sub.add_parser("impact", parents=[below], help="what a change to a file makes again")
+    p.add_argument("file")
+    p.add_argument("--depth", type=int, default=0, metavar="N",
+                   help="how many steps up to follow (default: all)")
+    p.set_defaults(func=cmd_impact)
 
     p = sub.add_parser("find", parents=[below], help="files whose path matches")
     p.add_argument("pattern")

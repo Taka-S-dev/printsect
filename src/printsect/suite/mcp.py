@@ -164,6 +164,11 @@ TOOLS = [
     Tool("deps_which", "Which outputs a source or header is built into, and how.",
          ["deps", "which"], {"file": _s("source or header, relative to the project")},
          ("file",), positional=("file",)),
+    Tool("deps_impact", "What a change to a file makes again: objects, archives, outputs and "
+         "where they are deployed.", ["deps", "impact"],
+         {"file": _s("source or header, relative to the project"),
+          "depth": _i("how many steps up to follow (default: all)")},
+         ("file",), options={"depth": "--depth"}, positional=("file",)),
     Tool("deps_find", "Files of the build whose path matches (text, *.h, or a regex).",
          ["deps", "find"],
          {"pattern": _s("part of a path, or a glob"), "regex": _b("pattern is a regex")},
@@ -238,7 +243,7 @@ BY_NAME = {t.name: t for t in TOOLS}
 # Tools that run commands written in the settings (build, deploy, deps, console), or
 # answer from what such a command saved (the deps_ questions).
 RUNS_SETTINGS = {"run", "deps_scan", "build_plan", "console_read", "console_send",
-                 "console_wait", "deps_which", "deps_find", "deps_tree"}
+                 "console_wait", "deps_which", "deps_impact", "deps_find", "deps_tree"}
 
 
 def _held_back(root: str) -> list[str]:

@@ -8,6 +8,7 @@ linked objects (`ld -r -o big.o ...`); such an object is a container like an arc
 from __future__ import annotations
 
 import os
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,15 @@ ARCHIVE = "archive"
 OBJECT = "object"
 SOURCE = "source"
 HEADER = "header"
+
+# How sure the graph is of a part. Whatever could not be read says so, with its reason.
+CONFIRMED = "confirmed"    # a tool that knows the build for certain said so
+BUILD = "build"            # taken from what the build itself printed
+SCRIPT = "script"          # taken from a script or a converter's file
+INFERRED = "inferred"      # worked out: a header found by following #include
+UNRESOLVED = "unresolved"  # named, but what makes it is not known
+EXCLUDED = "excluded"      # left out by a setting
+STATUSES = (CONFIRMED, BUILD, SCRIPT, INFERRED, UNRESOLVED, EXCLUDED)
 
 
 @dataclass
@@ -36,6 +46,10 @@ class Graph:
     inputs: dict[str, int] = field(default_factory=dict)  # watched file -> mtime_ns
     warnings: list[str] = field(default_factory=list)
     headers_traced: bool = True  # False: deps.headers is off, objects list no headers
+    default_status: str = BUILD  # what a part is unless it says otherwise
+    made: dict[str, dict[str, Any]] = field(default_factory=dict)  # generated -> {from, by}
+    copies: dict[str, str] = field(default_factory=dict)  # where it is deployed -> what
+    excluded: dict[str, str] = field(default_factory=dict)  # left out -> why
     _cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     # -- storage -------------------------------------------------------------------
@@ -51,6 +65,10 @@ class Graph:
             "inputs": self.inputs,
             "warnings": self.warnings,
             "headers_traced": self.headers_traced,
+            "default_status": self.default_status,
+            "made": self.made,
+            "copies": self.copies,
+            "excluded": self.excluded,
         }
 
     @classmethod
@@ -64,6 +82,10 @@ class Graph:
             inputs={k: int(v) for k, v in (data.get("inputs") or {}).items()},
             warnings=list(data.get("warnings") or []),
             headers_traced=bool(data.get("headers_traced", True)),
+            default_status=str(data.get("default_status") or BUILD),
+            made=dict(data.get("made") or {}),
+            copies=dict(data.get("copies") or {}),
+            excluded=dict(data.get("excluded") or {}),
         )
 
     # -- shape ---------------------------------------------------------------------
@@ -186,6 +208,59 @@ class Graph:
 
         walk(start, [start])
         return out
+
+    def status_of(self, path: str) -> str:
+        """How sure the graph is of this part (one of STATUSES)."""
+        if path in self.excluded:
+            return EXCLUDED
+        for table in (self.outs, self.archives, self.objects):
+            if path in table:
+                info = table[path]
+                if info.get("status"):
+                    return str(info["status"])
+                unmade = info.get("prebuilt") or (table is self.objects and not info.get("source"))
+                return UNRESOLVED if unmade else self.default_status
+        if path in self.headers() and self.default_status == BUILD:
+            return INFERRED
+        return self.default_status
+
+    def impact(self, path: str, depth: int = 0) -> dict[str, Any]:
+        """What a change to `path` makes again, nearest first; `depth` 0 follows it all."""
+        reached: dict[str, int] = {}
+        made: list[str] = []
+        files, seen = [path], {path}
+        while files:
+            file = files.pop()
+            for node, _ in self.starts_for(file):
+                reached.setdefault(node, 1)
+            for generated, info in self.made.items():
+                inputs = [*info.get("from", []), *([info["by"]] if info.get("by") else [])]
+                if file in inputs and generated not in seen:
+                    seen.add(generated)
+                    made.append(generated)
+                    files.append(generated)
+        up = self.parents()
+        queue = deque(reached)
+        while queue:
+            node = queue.popleft()
+            if depth and reached[node] >= depth:
+                continue
+            for parent in up.get(node, []):
+                if parent not in reached:
+                    reached[parent] = reached[node] + 1
+                    queue.append(parent)
+        reached.pop(path, None)
+
+        def of(table: dict[str, Any]) -> list[str]:
+            return sorted((p for p in reached if p in table), key=lambda p: (reached[p], p))
+
+        finals = set(self.final_outs())
+        outs = of(self.outs)
+        return {"file": path, "depth": depth, "made": sorted(made), "objects": of(self.objects),
+                "archives": of(self.archives), "parts": [o for o in outs if o not in finals],
+                "outs": [o for o in outs if o in finals],
+                "deployed": sorted(d for d, src in self.copies.items()
+                                   if src in reached or src == path or src in seen)}
 
     def which(self, path: str, limit: int = 500) -> list[dict[str, Any]]:
         """Ways from a file up to the roots, at most `limit` (roots_for_file has them all)."""

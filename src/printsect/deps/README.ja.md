@@ -26,6 +26,7 @@ build/out/netdrv.out
 | `psect-deps tree [NAME…]` | 上のツリー。`-s` でソース名、`--headers` で全ヘッダ、`--probed` でプローブのある枝だけ（`psect deps` で） |
 | `psect-deps tree -f PATTERN` | 一致するファイルまでの道筋だけを残す：文字列、`*.h`、または `--regex` |
 | `psect-deps which FILE` | ファイルがどこに入るか（最初の 20 通り。`--all` でそれ以上） |
+| `psect-deps impact FILE` | 変更すると作り直されるもの：生成ファイル、オブジェクト、アーカイブ、出力と、その配置先。`--depth N` で N 段まで |
 | `psect-deps find PATTERN` | パスが一致するファイル。`--quickfix` でエディタ用の `file:1: chain` |
 | `psect-deps html` | ブラウザで見て検索できる、1 つで完結したページ |
 
@@ -92,6 +93,11 @@ make では表せないビルド（ターゲットの一覧、コンパイラを
   "inputs": ["targets.csv"]
 }
 ```
+
+ファイルには、部品の確実性（オブジェクト、アーカイブ、出力の `"status"`：`confirmed`、`build`、`script`、`inferred`、`unresolved`、
+`excluded`）、ファイルを生成するもの（`"made": {"gen/a.c": {"from": ["a.def"], "by": "tools/gen.py"}}`）、出力の配置先
+（`"copies": {"target:/lib/app.out": "build/app.out"}`）、外したものとその理由（`"excluded": {"vendor/x.c": "not ours"}`）も書けます。
+`impact`、ページ、各コマンドの答えがこれを使います。
 
 パスはすべてプロジェクトからの相対パスで、プロジェクトの中を指します。名前を挙げた部品はすべて一覧に載せます（ビルド済みの
 アーカイブは `{"objects": [], "prebuilt": true}`）。`headers` は省略でき、省略するとヘッダがどの出力に入るかは分かりません。
