@@ -46,6 +46,34 @@ def out(args: argparse.Namespace, data: Any, text: str) -> None:
         print(text)
 
 
+def script_json(data: Any) -> str:
+    """JSON that is safe inside a <script> block of a page: nothing in it can close the
+    block or open a comment."""
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return text.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def save_page(args: argparse.Namespace, proj: Project, name: str, page: str) -> tuple[Path, bool]:
+    """Write a page to --out or the state folder, and open it for a person at a terminal."""
+    from .fsutil import ensure_state_dir, write_atomic
+
+    if args.out:
+        path = Path(args.out).resolve()
+    else:
+        ensure_state_dir(proj.state_dir)
+        path = proj.state_dir / name
+    write_atomic(path, page)
+    if path.is_relative_to(proj.root) and not path.is_relative_to(proj.state_dir):
+        print(f"note: {path.name} is inside the project: keep it out of version control",
+              file=sys.stderr)
+    opened = False
+    if not args.no_open and not args.json and sys.stdout.isatty():
+        import webbrowser
+
+        opened = webbrowser.open(path.as_uri())
+    return path, opened
+
+
 def _top_keys(value: Any, want: Any) -> Any:
     """A plugin section ({"type": str} only) is checked here for its type alone; the plugin
     checks the rest of its keys when it is made."""

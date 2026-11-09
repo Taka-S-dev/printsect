@@ -8,6 +8,7 @@ branches count, except `#if 0`), and a function made by a macro has no name to f
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 FUNCTION = "f"
@@ -255,12 +256,9 @@ def scan(text: str) -> Scan:
     return _read(text)[0]
 
 
-def use_lines(text: str, name: str) -> list[int]:
-    """Each line where `name` appears in what a scan reads as code: not in a comment, a
-    string or an `#if 0`, and so the same text the names of `scan` come from."""
-    _, s, cuts = _read(text)
-    pattern = re.compile(rf"\b{re.escape(name)}\b", _ASCII)
-    lines: list[int] = []
+def _in_code(s: str, cuts: list[tuple[int, int]],
+             pattern: re.Pattern[str]) -> Iterator[tuple[str, int]]:
+    """Each match of `pattern` in what a scan reads as code, with its line."""
     line = 1
     counted = at = 0
     for begin, end in [*cuts, (len(s), len(s))]:
@@ -268,10 +266,29 @@ def use_lines(text: str, name: str) -> list[int]:
             for match in pattern.finditer(s, at, begin):
                 line += s.count("\n", counted, match.start())
                 counted = match.start()
-                if not lines or lines[-1] != line:
-                    lines.append(line)
+                yield match.group(), line
         at = max(at, end)
+
+
+def use_lines(text: str, name: str) -> list[int]:
+    """Each line where `name` appears in what a scan reads as code: not in a comment, a
+    string or an `#if 0`, and so the same text the names of `scan` come from."""
+    _, s, cuts = _read(text)
+    lines: list[int] = []
+    for _word, line in _in_code(s, cuts, re.compile(rf"\b{re.escape(name)}\b", _ASCII)):
+        if not lines or lines[-1] != line:
+            lines.append(line)
     return lines
+
+
+def first_uses(text: str, names: set[str]) -> dict[str, int]:
+    """The first line each of `names` appears on as code: one reading for all of them."""
+    _, s, cuts = _read(text)
+    found: dict[str, int] = {}
+    for word, line in _in_code(s, cuts, _IDENT):
+        if word in names and word not in found:
+            found[word] = line
+    return found
 
 
 def _read(text: str) -> tuple[Scan, str, list[tuple[int, int]]]:

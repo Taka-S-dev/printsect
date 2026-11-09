@@ -9,18 +9,12 @@ The page holds paths relative to the project, never the folder it sits in.
 from __future__ import annotations
 
 import html
-import json
 from functools import cache
 from importlib.resources import files
 from typing import Any
 
+from ..core.cli import script_json as _embed
 from .graph import Graph
-
-
-def _embed(data: Any) -> str:
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    # Nothing in the data can close the script block or open a comment.
-    return text.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
 
 
 def _compact(graph: Graph) -> dict[str, Any]:

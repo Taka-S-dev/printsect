@@ -21,7 +21,7 @@ from ..core.config import Project
 from ..core.errors import ConfigError
 from ..core.fsutil import ensure_state_dir, is_link, write_atomic
 from ..core.plugins import register
-from .scanner import scan, use_lines
+from .scanner import first_uses, scan, use_lines
 
 INDEX_FILE = "map.json"
 INDEX_VERSION = 3
@@ -148,6 +148,15 @@ class ScanIndexer:
         except OSError:
             return []
         return use_lines(self._text(data), name)
+
+    def first_lines(self, project: Project, file: str, names: set[str]) -> dict[str, int]:
+        """The first line of `file` using each of `names`, for the page."""
+        try:
+            with open(project.root / file, "rb") as handle:
+                data = handle.read(MAX_FILE_BYTES + 1)
+        except OSError:
+            return {}
+        return first_uses(self._text(data), names)
 
     def index(self, project: Project, log: Callable[[str], None]) -> Index:
         path = project.state_file(INDEX_FILE)

@@ -778,3 +778,77 @@ def test_unresolved_names_the_files_it_could_not_read_for_certain(project, capsy
     _, out = data(capsys, "unresolved", "--root", str(p.root))
     assert [r["file"] for r in out["files"]["shown"]] == ["a.c"]
     assert out["files"]["shown"][0]["inside_if"] == 1
+
+
+def page_of(p):
+    page = (p.root / ".printsect" / "map.html").read_text(encoding="utf-8")
+    start = page.index('id="data">') + len('id="data">')
+    return page, json.loads(page[start:page.index("</script>", start)])
+
+
+def test_the_page_holds_the_map_and_fetches_nothing(project, capsys):
+    p = project(NET)
+    assert psect(["map", "html", "--no-open", "--root", str(p.root)]) == 0
+    page, d = page_of(p)
+    assert "https://" not in page
+    assert "http://" not in page.replace("http://www.w3.org/2000/svg", "")
+    assert "fetch(" not in page and "__DATA__" not in page and d["root"] == ""
+    assert p.root.as_posix() not in page and str(p.root) not in page
+    assert d["default"] == "directory" and set(d["groupings"]) == {"directory"}
+    assert "util/ring.c" in d["files"] and "ring_put" in d["symbols"]
+
+
+def test_the_page_says_the_line_of_each_use(project):
+    p = project(NET)
+    assert main(["html", "--no-open", "--root", str(p.root)]) == 0
+    _, d = page_of(p)
+    user, definer = d["files"].index("net/tx.c"), d["files"].index("util/ring.c")
+    flat = next(e[2] for e in d["edges"] if e[:2] == [user, definer])
+    assert d["symbols"][flat[0]] == "ring_put" and flat[1] == 1
+
+
+def test_the_page_agrees_with_the_commands(project, capsys):
+    p = project(NET)
+    _, summary_answer = data(capsys, "summary", "--root", str(p.root))
+    assert main(["html", "--no-open", "--root", str(p.root)]) == 0
+    _, d = page_of(p)
+    summary_page = d["views"]["directory"]["summary"]
+    assert summary_page["central"] == summary_answer["central"]
+    assert summary_page["classes"] == summary_answer["classes"]
+
+
+def test_links_put_the_folder_on_the_page_only_when_asked(project):
+    p = project(NET)
+    assert main(["html", "--no-open", "--links", "--root", str(p.root)]) == 0
+    assert page_of(p)[1]["root"] == p.root.as_posix()
+
+
+def test_a_name_cannot_close_the_script_of_the_page():
+    from printsect.map.page import render
+
+    page = render({"files": ["a</script><img src=x>.c"]}, "</title><b>")
+    assert "<img src=x>" not in page and "</title><b>" not in page
+
+
+def test_the_page_lists_a_change_since_a_snapshot(project):
+    p = project(NET)
+    assert main(["save", "--root", str(p.root)]) == 0
+    (p.root / "app" / "extra.c").write_bytes(b"int extra(void) { return ring_put(1); }\n")
+    assert main(["html", "--no-open", "--root", str(p.root)]) == 0
+    assert page_of(p)[1]["changes"]["last"]["files_added"]["shown"] == ["app/extra.c"]
+
+
+def test_the_page_can_group_by_the_build(project):
+    from printsect.deps import save
+    from printsect.deps.graph import Graph
+
+    p = project(NET)
+    objects = {"o/rx.o": {"source": "net/rx.c"}, "o/tx.o": {"source": "net/tx.c"},
+               "o/ring.o": {"source": "util/ring.c"}, "o/main.o": {"source": "app/main.c"}}
+    save(p, Graph(objects=objects,
+                  archives={"libnet.a": {"objects": ["o/rx.o", "o/tx.o", "o/ring.o"]}},
+                  outs={"app.out": {"objects": ["o/main.o"], "archives": ["libnet.a"]}}))
+    assert psect(["map", "html", "--no-open", "--root", str(p.root)]) == 0
+    _, d = page_of(p)
+    assert d["default"] == "archive" and set(d["groupings"]) == {"archive", "output", "directory"}
+    assert "libnet.a" in d["groupings"]["archive"]["names"]

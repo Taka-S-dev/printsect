@@ -536,6 +536,57 @@ def cmd_focus(args: argparse.Namespace) -> int:
     return 0
 
 
+def _snapshots(proj: Project) -> dict[str, dict[str, Any]]:
+    """The saved snapshots of the project, each as it is."""
+    from ..core.fsutil import plain_or_absent
+
+    found: dict[str, dict[str, Any]] = {}
+    if not (plain_or_absent(proj.state_dir) and proj.state_dir.is_dir()):
+        return found
+    for file in sorted(proj.state_dir.glob("map.*.snapshot.json")):
+        name = file.name[len("map."):-len(".snapshot.json")]
+        saved: Any = None
+        try:
+            if plain_or_absent(file):
+                saved = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if _SNAPSHOT_NAME.fullmatch(name) and _valid(saved):
+            found[name] = saved
+    return found
+
+
+def cmd_html(args: argparse.Namespace) -> int:
+    from ..core.cli import save_page
+    from ..core.timeutil import now
+    from .page import DIRECTORY, first_uses, page_data, render
+
+    code_map = _map(args)
+    proj, tables = args.map_project, code_map.t
+    groupings: dict[str, dict[str, str] | None] = {}
+    if not args.by_dir:
+        archives, outputs = args.map_modules(proj), args.map_outputs(proj)
+        if archives:
+            groupings["archive"] = archives
+        if outputs:
+            groupings["output"] = outputs
+    groupings[DIRECTORY] = None
+    default = "output" if args.by_out and "output" in groupings else next(iter(groupings))
+    now_snapshot = snapshot(code_map)
+    changes = {name: difference(saved, now_snapshot, 1 << 30)
+               for name, saved in _snapshots(proj).items()}
+    page = render(page_data(
+        name=proj.root.name, generated=now(), tables=tables, groupings=groupings, default=default,
+        classes=args.map_classes, layers=[str(x) for x in args.map_layers],
+        limits=_limits(code_map.overview(1)),
+        lines=first_uses(args.map_indexer, proj, tables), marks=args.map_marks(proj),
+        changes=changes, root=proj.root.as_posix() if args.links else ""), proj.root.name)
+    path, opened = save_page(args, proj, "map.html", page)
+    out(args, {"file": str(path), "opened": opened},
+        f"wrote {path}" + (" (opened in the browser)" if opened else ""))
+    return 0
+
+
 def _positive(text: str) -> int:
     value = int(text)
     if value < 1:
@@ -611,6 +662,12 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
     p = sub.add_parser("summary", parents=[below], help="what to read first")
     p.add_argument("--near", metavar="NAME", help="also the way in to this name or file")
     p.set_defaults(func=cmd_summary)
+    p = sub.add_parser("html", parents=[below], help="a page to read the map in a browser")
+    p.add_argument("--out", metavar="FILE", help="where to write it")
+    p.add_argument("--no-open", action="store_true", help="do not open it in the browser")
+    p.add_argument("--links", action="store_true",
+                   help="add links that open files in VS Code (puts this folder's path on it)")
+    p.set_defaults(func=cmd_html)
     p = sub.add_parser("save", parents=[below], help="keep the map as it is now, to compare later")
     p.add_argument("snapshot", nargs="?", default="last", help="a name for it (default: last)")
     p.set_defaults(func=cmd_save)

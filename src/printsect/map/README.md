@@ -45,6 +45,17 @@ All take `--top N` (rows per list, 30 by default; what is cut is counted), `--by
 `--only` and `--hide` (classes of code), `--json` and `--root DIR`. Each symbol
 comes with the file and line that define it.
 
+`psect-map html` writes one page to read the map in a browser, with nothing fetched from
+elsewhere. **Start here** has the same first summary as `summary`; **Map** draws the modules,
+with who uses whom, zoom, and the choice of what the pick uses or what uses it; **Modules** is a
+table to sort; **Problems**, **Unresolved** and **Changes** are `issues`, `unresolved` and `diff`.
+Find a function, variable, file, module or `FILE:LINE` at the top. Picking one shows where it is
+defined, each use with its line, and what a change can reach; `Trace from here`, then a second
+pick, gives the way between them. You can group by archive, final output or folder, and leave out
+classes of code. `--links` adds links that open a file in VS Code, and puts this folder's path in
+the page, so leave it off a page you hand on; it is `psect-deps html --public` that makes a copy
+with names masked.
+
 ## What is counted
 
 - A use is a (symbol, file using it) pair, not a line: ten calls from one file count once.
@@ -121,6 +132,7 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 |---|---|
 | `.printsect/map.json` | What each file defines and uses, so only changed files are read again |
 | `.printsect/map.NAME.snapshot.json` | What `psect-map save` kept |
+| `.printsect/map.html` | The page from `psect-map html`. Names your files and functions |
 
 ## Inside
 
@@ -132,3 +144,4 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | `model.py` | From the index to modules, roles, and the answers |
 | `cycles.py` | Finding the loops among modules |
 | `analysis.py` | Reach, strain, snapshots and the first summary |
+| `page.py`, `viewer.html` | The browser page: its data and its template |

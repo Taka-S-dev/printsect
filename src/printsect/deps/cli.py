@@ -224,7 +224,7 @@ def cmd_find(args: argparse.Namespace) -> int:
 
 
 def cmd_html(args: argparse.Namespace) -> int:
-    from ..core.fsutil import ensure_state_dir, write_atomic
+    from ..core.cli import save_page
     from .html import render_html
 
     proj = project(args)
@@ -235,20 +235,7 @@ def cmd_html(args: argparse.Namespace) -> int:
         report = None
         page = render_html(graph, args.deps_marks(proj), name=proj.root.name,
                            stale=graph.stale_inputs(proj.root), map_data=args.deps_map(proj))
-    if args.out:
-        path = Path(args.out).resolve()
-    else:
-        ensure_state_dir(proj.state_dir)
-        path = proj.state_dir / ("deps.public.html" if args.public else "deps.html")
-    write_atomic(path, page)
-    if path.is_relative_to(proj.root) and not path.is_relative_to(proj.state_dir):
-        print(f"note: {path.name} is inside the project: keep it out of version control",
-              file=sys.stderr)
-    opened = False
-    if not args.no_open and not args.json and sys.stdout.isatty():
-        import webbrowser
-
-        opened = webbrowser.open(path.as_uri())
+    path, opened = save_page(args, proj, "deps.public.html" if args.public else "deps.html", page)
     said = f"wrote {path}" + (" (opened in the browser)" if opened else "")
     if report:
         said += ("\nmasked: {names} name(s), {absolute_paths} absolute path(s), "
