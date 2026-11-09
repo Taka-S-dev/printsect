@@ -507,7 +507,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 
 def page_data(proj: Project, by_archive: dict[str, str] | None = None,
-              by_output: dict[str, str] | None = None) -> dict[str, Any]:
+              by_output: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """The map for the build's page: every file's module, by folder and by what the build
     groups it into when that is known, and who uses what. Paths are the same ones the
     build's graph uses, so the two join up."""
@@ -516,7 +516,8 @@ def page_data(proj: Project, by_archive: dict[str, str] | None = None,
     index = make_indexer(proj.settings.get("map")).index(proj, lambda text: None)
     tables = build(index)
     code_map = Map(tables)
-    grouped = {k: v for k, v in (("by_archive", by_archive), ("by_output", by_output)) if v}
+    grouped: dict[str, Any] = {k: v for k, v in (("by_archive", by_archive),
+                                                 ("by_output", by_output)) if v}
     return {"modules": dict(code_map.owner), **grouped,
             "edges": [[a, b, sorted(names)[:5]] for (a, b), names in tables.edges.items()]}
 

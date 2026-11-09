@@ -216,6 +216,9 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
 // and one drawing is held to a row budget.
 const D = JSON.parse(document.getElementById("data").textContent);
 const P = D.paths;
+if (D.map && D.map.by_output) {
+  for (const [file, outs] of Object.entries(D.map.by_output)) D.map.by_output[file] = outs.join("+");
+}
 const at = (i) => P[i];
 const outs = {}, archives = {}, objects = {};
 for (const [o, objs, archs, libs] of D.outs) {

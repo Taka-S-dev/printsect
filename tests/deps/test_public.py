@@ -113,10 +113,10 @@ def test_a_public_page_is_not_written_past_a_refused_knowledge_file(project, cap
 def test_the_build_groupings_of_the_map_are_masked_too():
     masker = Masker(["acme"], True)
     done = mask_map({"modules": {"a.c": "x/"}, "by_archive": {"a.c": "libacme.a"},
-                     "by_output": {"a.c": "acme.out"}, "edges": []}, masker)
+                     "by_output": {"a.c": ["acme.out"]}, "edges": []}, masker)
     assert "acme" not in json.dumps(done)
     assert done["by_archive"]["file-1.c"].startswith("module-")
-    assert done["by_output"]["file-1.c"].startswith("module-")
+    assert done["by_output"]["file-1.c"][0].startswith("module-")
 
 
 def graph_file(p, extra):
@@ -155,10 +155,10 @@ def test_the_page_can_group_the_map_by_what_the_build_makes(project):
                   outs={"x.out": {"archives": ["l.a"]}}))
     assert main(["deps", "html", "--no-open", "--root", str(p.root)]) == 0
     text = data_of(p, "deps.html")
-    assert '"by_archive":{"a.c":"l.a"}' in text and '"by_output":{"a.c":"x.out"}' in text
+    assert '"by_archive":{"a.c":"l.a"}' in text and '"by_output":{"a.c":["x.out"]}' in text
 
 
 def test_every_output_a_file_is_grouped_under_is_masked():
-    done = mask_map({"modules": {}, "edges": [],
-                     "by_output": {"a.c": "/data/one/a.out+/data/two/b.out"}}, Masker([], False))
-    assert done["by_output"]["a.c"] == "(outside)/a.out+(outside)/b.out"
+    outs = ["/data/one/a.out", "/data/a+b/secret/b.out"]
+    done = mask_map({"modules": {}, "edges": [], "by_output": {"a.c": outs}}, Masker([], False))
+    assert done["by_output"]["a.c"] == ["(outside)/a.out", "(outside)/b.out"]

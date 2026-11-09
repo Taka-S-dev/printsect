@@ -62,21 +62,28 @@ def _archive_modules(proj: Project) -> dict[str, str] | None:
     return owner or None
 
 
-def _output_modules(proj: Project) -> dict[str, str] | None:
-    """Each source file -> the final outputs it ends up in, joined when more than one."""
+def _outputs_of(proj: Project) -> dict[str, list[str]] | None:
+    """Each source file -> the final outputs it ends up in."""
     from .deps import DEPS_FILE, load
 
     if not proj.state_file(DEPS_FILE).is_file():
         return None
     try:
         graph = load(proj)
-        owner = {s: "+".join(sorted(graph.roots_for_file(s))) or "(not in an output)"
+        owner = {s: sorted(graph.roots_for_file(s)) or ["(not in an output)"]
                  for s in graph.sources()}
     except (PsectError, AttributeError, TypeError, KeyError):
         return None
-    if any(not (isinstance(n, str) and n.isprintable()) for pair in owner.items() for n in pair):
+    if any(not (isinstance(n, str) and n.isprintable())
+           for source, outs in owner.items() for n in (source, *outs)):
         return None
     return owner or None
+
+
+def _output_modules(proj: Project) -> dict[str, str] | None:
+    """Each source file -> its final outputs as one name, for grouping by them."""
+    owner = _outputs_of(proj)
+    return {s: "+".join(outs) for s, outs in owner.items()} if owner else None
 
 
 def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
@@ -103,7 +110,7 @@ def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
 def _page_map(proj: Project) -> dict[str, Any] | None:
     from .map.cli import page_data
 
-    return page_data(proj, _archive_modules(proj), _output_modules(proj))
+    return page_data(proj, _archive_modules(proj), _outputs_of(proj))
 
 
 def _knowledge_names(proj: Project) -> list[str]:
