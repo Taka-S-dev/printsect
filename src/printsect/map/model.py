@@ -32,6 +32,7 @@ class Tables:
     lines: dict[tuple[str, str], int] = field(default_factory=dict)  # (file, name) -> line
     files: list[str] = field(default_factory=list)
     omitted: dict[str, int] = field(default_factory=dict)
+    inside_if: int = 0  # definitions counted though an #if may leave them out of a build
 
 
 def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
@@ -71,8 +72,9 @@ def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
         "unbalanced_files": sum(e.unbalanced for e in files.values()),
         "too_long_declarations": sum(e.too_long for e in files.values()),
         "too_large": index.too_large, "unreadable": index.unreadable, "links": index.links,
-        "not_in_build": len(index.files) - len(files),
+        "excluded": index.excluded, "not_in_build": len(index.files) - len(files),
     }
+    tables.inside_if = sum(e.inside_if for e in files.values())
     return tables
 
 
@@ -187,7 +189,7 @@ class Map:
         return {"files": len(self.t.files), "grouped_by": self.grouped_by,
                 "modules": _capped(rows, top), "edges": _capped(edges, top),
                 "cycles": _capped(self._cycles(between, top), top),
-                "omitted": self.t.omitted}
+                "omitted": self.t.omitted, "inside_if": self.t.inside_if}
 
     def _cycles(self, between: Counter[tuple[str, str]], top: int) -> list[dict[str, Any]]:
         """Each loop among the modules, with one shortest way round and its symbols."""
@@ -295,4 +297,4 @@ class Map:
                 "from_outside": _capped(side(came_in), top),
                 "to_outside": _capped(side(went_out), top),
                 "inside": _capped(inner, top), "files": _capped(files, top),
-                "omitted": self.t.omitted}
+                "omitted": self.t.omitted, "inside_if": self.t.inside_if}

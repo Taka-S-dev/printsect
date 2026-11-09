@@ -24,7 +24,7 @@ from ..core.plugins import register
 from .scanner import scan
 
 INDEX_FILE = "map.json"
-INDEX_VERSION = 2
+INDEX_VERSION = 3
 MAX_FILE_BYTES = 4 << 20
 DEFAULT_EXTENSIONS = (".c", ".cc", ".cpp", ".cxx")
 DEFAULT_ENCODINGS = ("utf-8", "cp932")
@@ -41,6 +41,7 @@ class FileEntry:
     macro_defs: int = 0
     unbalanced: bool = False
     too_long: int = 0
+    inside_if: int = 0
 
 
 @dataclass
@@ -49,6 +50,7 @@ class Index:
     too_large: int = 0
     unreadable: int = 0
     links: int = 0
+    excluded: int = 0  # files and folders map.exclude took out
 
 
 @register("indexer", "scan")
@@ -93,11 +95,15 @@ class ScanIndexer:
                     if "." not in entry.name or rel.lower().endswith(self.extensions):
                         index.links += 1
                 elif stat.S_ISDIR(info.st_mode):
-                    if not entry.name.startswith(".") and not self._excluded(rel):
+                    if self._excluded(rel):
+                        index.excluded += 1
+                    elif not entry.name.startswith("."):
                         stack.append((entry.path, rel + "/"))
-                elif (stat.S_ISREG(info.st_mode) and rel.lower().endswith(self.extensions)
-                      and not self._excluded(rel)):
-                    yield rel, info
+                elif stat.S_ISREG(info.st_mode) and rel.lower().endswith(self.extensions):
+                    if self._excluded(rel):
+                        index.excluded += 1
+                    else:
+                        yield rel, info
 
     def _text(self, data: bytes) -> str:
         for name in self.encodings:
@@ -121,7 +127,7 @@ class ScanIndexer:
                         and isinstance(item["r"], str) and _NAMES.fullmatch(item["r"])
                         and isinstance(item["d"], list)
                         and isinstance(item["x"], int) and isinstance(item["b"], int)
-                        and isinstance(item["l"], int)):
+                        and isinstance(item["l"], int) and isinstance(item["c"], int)):
                     return {}
                 for name, kind, static, line in item["d"]:
                     if not (isinstance(name, str) and _NAME.fullmatch(name) and kind in "fv"
@@ -159,12 +165,12 @@ class ScanIndexer:
                           "d": [[n, k, int(st), line] for n, k, st, line in found.defs],
                           "r": " ".join(found.refs),
                           "x": found.macro_defs, "b": int(found.unbalanced),
-                          "l": found.too_long}
+                          "l": found.too_long, "c": found.inside_if}
         for rel, item in fresh.items():
             index.files[rel] = FileEntry(
                 defs=[(str(n), str(k), bool(st), int(line)) for n, k, st, line in item["d"]],
                 refs=item["r"].split(), macro_defs=int(item["x"]), unbalanced=bool(item["b"]),
-                too_long=int(item["l"]))
+                too_long=int(item["l"]), inside_if=int(item["c"]))
         if todo or len(fresh) != len(cached):
             try:
                 ensure_state_dir(project.state_dir)

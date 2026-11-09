@@ -65,10 +65,19 @@ def _omitted(omitted: dict[str, int]) -> str:
         f"too large {omitted['too_large']}" if omitted["too_large"] else "",
         f"unreadable {omitted['unreadable']}" if omitted["unreadable"] else "",
         f"links not followed {omitted['links']}" if omitted["links"] else "",
+        f"by map.exclude {omitted['excluded']} path(s)" if omitted["excluded"] else "",
         f"not in the build {omitted['not_in_build']} file(s)" if omitted["not_in_build"] else "",
     ]
     listed = "; ".join(p for p in parts if p)
     return f"left out: {listed}" if listed else "left out: nothing"
+
+
+def _limits(data: dict[str, Any]) -> list[str]:
+    """What the answer does not cover, and what it counts without being sure."""
+    lines = [_omitted(data["omitted"])]
+    if data["inside_if"]:
+        lines.append(f"counted though an #if may leave them out: {data['inside_if']} definition(s)")
+    return lines
 
 
 def _overview_text(data: dict[str, Any]) -> str:
@@ -87,7 +96,7 @@ def _overview_text(data: dict[str, Any]) -> str:
     if more := _more(data["edges"]):
         lines.append(more)
     lines += _cycles_text(data["cycles"])
-    lines.append(_omitted(data["omitted"]))
+    lines += _limits(data)
     return "\n".join(lines)
 
 
@@ -133,7 +142,7 @@ def _focus_text(data: dict[str, Any]) -> str:
                      f"to outside {f['to_outside']}{probes}")
     if more := _more(data["files"]):
         lines.append(more)
-    lines.append(_omitted(data["omitted"]))
+    lines += _limits(data)
     return "\n".join(lines)
 
 

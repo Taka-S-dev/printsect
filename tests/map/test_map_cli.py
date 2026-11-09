@@ -271,6 +271,35 @@ def test_folders_starting_with_a_dot_and_excluded_paths_are_skipped(project, cap
     assert out["files"] == 4
 
 
+def test_what_map_exclude_took_out_is_counted(project, capsys):
+    extra = {"third/y.c": b"int y;\n", "third/z.txt": b"x", "vendor/in/v.c": b"int v;\n"}
+    p = project({**NET, **extra}, config="map:\n  exclude: ['third/*', 'vendor']\n")
+    _, out = data(capsys, "--root", str(p.root))
+    assert out["files"] == 4 and out["omitted"]["excluded"] == 2  # a file and a folder
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    assert "by map.exclude 2 path(s)" in capsys.readouterr().out
+
+
+def test_definitions_inside_an_if_are_counted_and_reported(project, capsys):
+    p = project({"a.c": b"int plain;\n#ifdef X\nint maybe;\n#else\nint other;\n#endif\n"
+                        b"#if 1\nint sure;\n#endif\n#if 0\nint dead;\n#endif\n"})
+    _, out = data(capsys, "--root", str(p.root))
+    assert out["inside_if"] == 2
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    assert "#if may leave them out: 2 definition(s)" in capsys.readouterr().out
+    _, again = data(capsys, "--root", str(p.root))  # from the saved index
+    assert again["inside_if"] == 2
+
+
+def test_no_definition_inside_an_if_says_nothing(project, capsys):
+    p = project(NET)
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    assert "#if" not in capsys.readouterr().out
+
+
 def test_a_misspelt_setting_stops_with_the_nearest(project, capsys):
     p = project(NET, config="map:\n  exlude: []\n")
     assert main(["--root", str(p.root)]) == 2

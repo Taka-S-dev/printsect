@@ -58,6 +58,7 @@ class Scan:
     macro_defs: int = 0  # bodies whose name a macro makes, so it cannot be read here
     unbalanced: bool = False  # braces did not close: what follows the fault is not seen
     too_long: int = 0  # declarations past MAX_SEGMENT, not read
+    inside_if: int = 0  # definitions under an #if that cannot be told without a compiler
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -142,6 +143,8 @@ class _Walk:
         self.line = 1
         self.old_style: tuple[str, bool, int] | None = None
         self.old_style_mark = 0
+        self.in_if = False
+        self.inside_if: set[str] = set()
 
     def _line_of(self, pos: int) -> int:
         if pos >= self.line_at:
@@ -153,6 +156,8 @@ class _Walk:
 
     def _add(self, name: str, kind: str, static: bool, start: int, end: int) -> None:
         pos = self.s.rfind(name, start, end)
+        if self.in_if:
+            self.inside_if.add(name)
         self.out.defs.append((name, kind, static, self._line_of(pos if pos >= 0 else start)))
 
     def brace_at_top(self, start: int, end: int) -> str:
@@ -303,6 +308,7 @@ def scan(text: str) -> Scan:
             continue
         if dead:
             continue
+        walk.in_if = any(c[1] is None for c in conditions)
         if token == "{":
             if depth == 0:
                 walk._type_head = s[start:match.start()]
@@ -335,4 +341,5 @@ def scan(text: str) -> Scan:
     own = set(first_of_each)
     walk.out.refs = sorted(set(_IDENT.findall(" ".join(pieces))) - KEYWORDS - own)
     walk.out.unbalanced = depth != 0
+    walk.out.inside_if = len(walk.inside_if & own)
     return walk.out

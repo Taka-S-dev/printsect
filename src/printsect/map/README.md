@@ -44,7 +44,10 @@ comes with the file and line that define it.
   are mostly declarations; counting them only shows that everything includes the public ones.
 - Nothing is guessed. A name defined in several files, that the using file cannot be
   told to mean, is left out. So is a name whose only definitions are `static` in other
-  files, which C does not let it reach. The answer always says how many were left out.
+  files, which C does not let it reach. The answer always says how many were left out,
+  and how many paths `map.exclude` took out.
+- A definition inside an `#if` counts even though a build may leave it out; the answer
+  says how many there are.
 
 Modules are the top folders, with the heaviest split so that a big folder is shown by
 its parts; a folder that gave up a part stands for what remains. Under `psect map`,
