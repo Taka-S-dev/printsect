@@ -23,6 +23,9 @@ left out: same name in several files 80 symbol(s) (391 use(s)); static elsewhere
 `in 1054 (14)` means 1054 uses from 14 other modules. `start` uses others and nothing
 uses it, `base` is only used, `core` is used by three or more and uses others.
 
+`cycles` lists the modules that use each other, directly or through others, with one
+shortest way round each and the symbols on it. It says `cycles: none` when there are none.
+
 ## Commands
 
 | Command | What it does |
@@ -53,7 +56,8 @@ not use are left out, which also settles most names defined for several platform
 It reads the shape of the code, without a compiler:
 
 - A call through a function pointer has no name to match.
-- `#if` is not evaluated, except `#if 0`: both branches count.
+- `#if` is not evaluated, except `#if 0`: both branches count, so a cycle may join
+  code that is never built together.
 - A function or variable whose name a macro makes is not found (counted as "named by a macro").
 - A call made inside a header's macro is seen as the macro's name, not the function's.
 - A local variable with the same name as another file's global counts as a use of it.
@@ -103,3 +107,4 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | `scanner.py` | One file's definitions and the names it uses |
 | `index.py` | The builtin indexer: walking the project, and the saved index |
 | `model.py` | From the index to modules, roles, and the two answers |
+| `cycles.py` | Finding the loops among modules |

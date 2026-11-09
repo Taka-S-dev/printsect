@@ -86,6 +86,7 @@ def _overview_text(data: dict[str, Any]) -> str:
     lines += [f"  {e['from']} -> {e['to']}  {e['count']}" for e in data["edges"]["shown"]]
     if more := _more(data["edges"]):
         lines.append(more)
+    lines += _cycles_text(data["cycles"])
     lines.append(_omitted(data["omitted"]))
     return "\n".join(lines)
 
@@ -94,6 +95,22 @@ def _symbols(row: dict[str, Any]) -> str:
     names = [f"{s['name']} ({s['file']}:{s['line']})" for s in row["symbols"]]
     extra = f", +{row['more_symbols']}" if row["more_symbols"] else ""
     return ", ".join(names) + extra
+
+
+def _cycles_text(cycles: dict[str, Any]) -> list[str]:
+    if not cycles["total"]:
+        return ["cycles: none"]
+    lines = [f"cycles ({cycles['total']}), modules using each other, one way round each:"]
+    for cycle in cycles["shown"]:
+        modules = cycle["modules"]
+        rest = modules["total"] - len(modules["shown"])
+        names = ", ".join(modules["shown"]) + (f", +{rest}" if rest else "")
+        lines.append(f"  {modules['total']} module(s): {names}")
+        lines += [f"    {r['from']} -> {r['to']}  {r['count']}  {_symbols(r)}"
+                  for r in cycle["round_trip"]]
+    if more := _more(cycles):
+        lines.append(more)
+    return lines
 
 
 def _focus_text(data: dict[str, Any]) -> str:

@@ -10,6 +10,7 @@ import pytest
 from printsect.cli import main as psect
 from printsect.map import index as index_module
 from printsect.map.cli import main
+from printsect.map.cycles import loops, round_trip
 from printsect.map.index import FileEntry, Index
 from printsect.map.model import Map, build, directory_groups
 from printsect.suite.mcp import BY_NAME, RUNS_SETTINGS, call
@@ -98,6 +99,58 @@ def test_focus_shows_both_sides_with_where_symbols_are(project, capsys):
     assert out["inside"]["shown"][0]["from"] == "net/rx.c"
     files = {f["file"]: f for f in out["files"]["shown"]}
     assert files["net/rx.c"]["from_outside"] == 1 and files["net/tx.c"]["from_outside"] == 0
+
+
+LOOP = {
+    "a/one.c": b"int one(void) { return two(); }\n",
+    "b/two.c": b"int two(void) { return three(); }\n",
+    "c/three.c": b"int three(void) { return one(); }\n",
+    "d/leaf.c": b"int leaf(void) { return one(); }\n",
+}
+
+
+def test_a_cycle_is_shown_with_a_way_round_and_its_symbols(project, capsys):
+    p = project(LOOP)
+    _, out = data(capsys, "--root", str(p.root))
+    assert out["cycles"]["total"] == 1
+    cycle = out["cycles"]["shown"][0]
+    assert cycle["modules"]["shown"] == ["a/", "b/", "c/"]  # d/ only uses them
+    legs = [(r["from"], r["to"]) for r in cycle["round_trip"]]
+    assert legs == [("a/", "b/"), ("b/", "c/"), ("c/", "a/")]
+    assert cycle["round_trip"][0]["symbols"] == [{"name": "two", "file": "b/two.c", "line": 1}]
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    text = capsys.readouterr().out
+    assert "3 module(s): a/, b/, c/" in text and "a/ -> b/  1  two (b/two.c:1)" in text
+
+
+def test_no_cycle_says_so(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "--root", str(p.root))
+    assert out["cycles"] == {"shown": [], "total": 0}
+    capsys.readouterr()
+    main(["--root", str(p.root)])
+    assert "cycles: none" in capsys.readouterr().out
+
+
+def test_two_cycles_are_told_apart_and_the_list_is_cut_by_top():
+    files = {}
+    for x, y in (("a", "b"), ("b", "a"), ("c", "d"), ("d", "c")):
+        files[f"{x}/f.c"] = entry((f"{x}_f", False), refs=[f"{y}_f"])
+    out = Map(build(Index(files=files))).overview(1)
+    assert out["cycles"]["total"] == 2 and len(out["cycles"]["shown"]) == 1
+
+
+def test_a_long_chain_does_not_reach_the_recursion_limit():
+    uses = {str(i): [str(i + 1)] for i in range(5000)}
+    uses["5000"] = ["0"]
+    group = loops(uses)
+    assert len(group) == 1 and len(group[0]) == 5001
+
+
+def test_the_shortest_way_round_is_taken():
+    uses = {"a": ["b", "c"], "b": ["d"], "c": ["a"], "d": ["a"]}
+    assert round_trip("a", uses, {"a", "b", "c", "d"}) == ["a", "c"]
 
 
 def test_an_unknown_module_names_the_nearest(project, capsys):

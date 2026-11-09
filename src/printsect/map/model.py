@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .cycles import loops, round_trip
 from .index import Index
 
 ROOT_FOLDER = "./"
@@ -138,7 +139,7 @@ def _role(users: int, used: int) -> str:
     return "core" if users >= 3 else "middle"
 
 
-def _capped(rows: list[dict[str, Any]], top: int) -> dict[str, Any]:
+def _capped(rows: list[Any], top: int) -> dict[str, Any]:
     return {"shown": rows[:top], "total": len(rows)}
 
 
@@ -185,7 +186,39 @@ class Map:
                  for (a, b), n in sorted(between.items(), key=lambda kv: (-kv[1], kv[0]))]
         return {"files": len(self.t.files), "grouped_by": self.grouped_by,
                 "modules": _capped(rows, top), "edges": _capped(edges, top),
+                "cycles": _capped(self._cycles(between, top), top),
                 "omitted": self.t.omitted}
+
+    def _cycles(self, between: Counter[tuple[str, str]], top: int) -> list[dict[str, Any]]:
+        """Each loop among the modules, with one shortest way round and its symbols."""
+        uses: dict[str, list[str]] = defaultdict(list)
+        for (a, b), _n in sorted(between.items(), key=lambda kv: (-kv[1], kv[0])):
+            uses[a].append(b)
+        groups = loops(uses)
+        paths = []
+        for group in groups:
+            members = set(group)
+            weight: Counter[str] = Counter()
+            for (a, b), n in between.items():
+                if a in members and b in members:
+                    weight[a] += n
+                    weight[b] += n
+            start = min(group, key=lambda m: (-weight[m], m))
+            path = round_trip(start, uses, members)
+            paths.append(list(zip(path, [*path[1:], path[0]], strict=True)))
+        wanted = {leg for path in paths for leg in path}
+        symbols: dict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
+        for (user, definer), names in self.t.edges.items():
+            leg = (self._module_of(user), self._module_of(definer))
+            if leg in wanted:
+                symbols[leg].update((definer, s) for s in names)
+        rows: list[dict[str, Any]] = [
+            {"modules": _capped(group, top), "round_trip": [
+                {"from": a, "to": b, "count": between[(a, b)], **self._symbols(symbols[(a, b)])}
+                for a, b in path]}
+            for group, path in zip(groups, paths, strict=True)]
+        rows.sort(key=lambda r: (-r["modules"]["total"], r["modules"]["shown"][0]))
+        return rows
 
     def known_names(self) -> list[str]:
         names = set(self.owner.values())

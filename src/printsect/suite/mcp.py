@@ -173,8 +173,8 @@ TOOLS = [
          {"find": _s("keep branches with a matching file"),
           "probed": _b("only branches holding a probe (default when find is not given)")},
          options={"find": "--find"}, switches={"probed": "--probed"}),
-    Tool("map", "The code's parts and who uses whom, most used first: read this first in code "
-         "you do not know. Names only, no compiler; says how much it left out.",
+    Tool("map", "The code's parts, who uses whom (most used first) and any cycles: read this "
+         "first in code you do not know. Names only, no compiler; says how much it left out.",
          ["map"], {"top": _i("rows per list (default 30)"),
                    "by_dir": _b("group by folder even when the build's archives are known")},
          options={"top": "--top"}, switches={"by_dir": "--by-dir"}),
