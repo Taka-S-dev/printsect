@@ -33,7 +33,9 @@ shortest way round each and the symbols on it. It says `cycles: none` when there
 | `psect-map` | The whole picture: modules with most users first, and who uses whom |
 | `psect-map focus MODULE` | One module, archive or any folder: who uses it and through which symbols, what it uses, what is inside, and each file's place (`entry` = used from outside) |
 | `psect-map who NAME` | Who uses one function, variable or file (or what is defined at `FILE:LINE`): where it is defined, each using file with its lines, how sure, and why when the name has several definitions. `--links` adds links that open each use in VS Code |
-| `psect-map impact NAME` | What a change to a function, variable or file can reach, level by level, and under `psect map` what the build makes again. `--up` is what it rests on, `--depth N` stops early |
+| `psect-map impact NAME` | What a change to a function, variable, file or module can reach, level by level, and under `psect map` what the build makes again. `--up` is what it rests on, `--depth N` stops early |
+| `psect-map path FROM TO` | The shortest way one function, variable, file or module comes to use another, with the symbols on each step. When there is none, says whether the other direction has one |
+| `psect-map unresolved` | Each name left off the map with its reason: several definitions (with where) or static only, how many files use it, and the files a macro, an `#if` or unclosed braces keep from being read for certain |
 | `psect-map issues` | Cycles, tangled pairs, modules used by or using many, links against `map.layers`, single-use links. Places to look, not verdicts |
 | `psect-map summary` | What to read first: central modules, entrances, widest reach, most unresolved, class of the code. `--near NAME` also gives the way in to it |
 | `psect-map save [NAME]`, `psect-map diff [NAME]` | Keep the map now, then see new and gone links, grown modules, new cycles, unresolved uses and files added or removed |

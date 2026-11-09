@@ -4,9 +4,12 @@
     psect-map focus MODULE     one module: who uses it, what it uses, its files
     psect-map who NAME         who uses a function, variable or file (or FILE:LINE)
     psect-map impact NAME      what a change to it can reach, level by level
+    psect-map path FROM TO     the way one name, file or module comes to use another
+    psect-map unresolved       each name left off the map, and why
     psect-map issues           cycles, tangled modules, links against the layers
     psect-map summary          what to read first
     psect-map save, diff       how the map has changed since a snapshot
+    psect-map html             a page to read the map in a browser
 
 It reads the source and runs nothing, so it works before anything is set up. `psect map`
 is the same tool inside printsect, which groups by the build's archives when the build
@@ -28,7 +31,7 @@ from .. import __version__
 from ..core.cli import common, common_below, out, project, run
 from ..core.config import Project
 from ..core.errors import PsectError
-from .analysis import _valid, difference, impact, issues, snapshot, summary
+from .analysis import _valid, difference, impact, issues, path, snapshot, summary, unresolved
 from .model import Map, build, classify
 
 Modules = Callable[[Project], "dict[str, str] | None"]
@@ -94,6 +97,7 @@ def _map(args: argparse.Namespace) -> Map:
     indexer = make_indexer(settings)
     index = indexer.index(proj, lambda text: print(text, file=sys.stderr))
     args.map_project = proj
+    args.map_indexer = indexer
     rules = args.map_rules(proj)
     # What the settings say comes before what a knowledge file says.
     classes = classify(index.files, {**(settings.get("classes") or {}),
@@ -300,25 +304,32 @@ def cmd_who(args: argparse.Namespace) -> int:
 
 
 def _start(code_map: Map, name: str) -> tuple[list[str], str | None]:
-    """The files a change starts from, and the one symbol if a symbol was named."""
-    if _IDENTIFIER.fullmatch(name):
+    """The files a name stands for, and the one symbol if a symbol was named. A function
+    or variable comes first, then a source file, then a module, archive or folder."""
+    is_name = _IDENTIFIER.fullmatch(name)
+    if is_name:
         found = code_map.symbol(name, 1)
-        if found is None:
-            raise PsectError(f"nothing here defines or uses {name!r}")
-        files = [f for f, e in code_map.t.entries.items() for d in e.defs
-                 if d[0] == name and not d[2]]
-        if len(files) != 1:
-            raise PsectError(f"{name!r} is {found['status']}: no one definition to start from")
-        return files, name
-    files = code_map.files_named(name)
-    if len(files) != 1:
-        raise PsectError(f"no one source file named {name!r}")
-    return files, None
+        if found is not None:
+            files = [f for f, e in code_map.t.entries.items() for d in e.defs
+                     if d[0] == name and not d[2]]
+            if len(files) != 1:
+                raise PsectError(f"{name!r} is {found['status']}: no one definition to start from")
+            return files, name
+    else:
+        files = code_map.files_named(name)
+        if len(files) == 1:
+            return files, None
+    module = code_map.resolve(name)
+    inside = [f for f in code_map.t.files if module and code_map._inside(module, f)]
+    if inside:
+        return inside, None
+    raise PsectError(f"nothing here defines or uses {name!r}, and no module is named that"
+                     if is_name else f"no one source file or module named {name!r}")
 
 
 def _impact_text(data: dict[str, Any]) -> str:
     title = "rests on" if data["direction"] == "up" else "can reach"
-    what = data["symbol"] or ", ".join(data["from"])
+    what = data["symbol"] or data.get("module") or ", ".join(data["from"])
     lines = [f"{what} {title} {data['files']['total']} file(s) in "
              f"{len(data['modules'])} module(s):"]
     lines += [f"  {r['depth']}  {r['file']}  {r['module']}  {', '.join(r['via'])}"
@@ -339,10 +350,49 @@ def cmd_impact(args: argparse.Namespace) -> int:
     code_map = _map(args)
     files, symbol = _start(code_map, args.name)
     data = impact(code_map, files, symbol, args.depth, args.up, args.top)
+    if symbol is None and code_map.files_named(args.name) != files:
+        data["module"] = args.name
     build = None if args.no_build_info else args.map_builds(args.map_project, files)
     if build:
         data["build"] = build
     out(args, data, _impact_text(data))
+    return 0
+
+
+def cmd_path(args: argparse.Namespace) -> int:
+    code_map = _map(args)
+    data = path(code_map, _start(code_map, args.start)[0], _start(code_map, args.end)[0])
+    data.update(start=args.start, end=args.end)
+    if data["found"]:
+        lines = [f"{args.start} comes to use {args.end} in {len(data['steps'])} step(s):"]
+        lines += [f"  {s['from']} -> {s['to']}  {', '.join(s['via'])}"
+                  + (f", +{s['more_via']}" if s["more_via"] else "") for s in data["steps"]]
+    else:
+        lines = [f"no way found from {args.start} to {args.end}"]
+        if data["other_way_steps"] is not None:
+            lines.append(f"the other way round there is one, in {data['other_way_steps']} step(s)")
+    lines.append(f"not seen: {data['not_seen']}")
+    out(args, data, "\n".join(lines))
+    return 0
+
+
+def cmd_unresolved(args: argparse.Namespace) -> int:
+    data = unresolved(_map(args), args.top)
+
+    def name(r: dict[str, Any]) -> str:
+        where = ", ".join(f"{d['file']}:{d['line']}" for d in r["defined"])
+        more = f", +{r['more_defined']}" if r["more_defined"] else ""
+        return f"{r['name']}  used by {r['users']}  defined in {where}{more}"
+
+    def file(r: dict[str, Any]) -> str:
+        kinds = [f"{k} {r[k]}" for k in ("macro_made", "inside_if", "too_long") if r[k]]
+        return "  ".join([r["file"], *kinds, *(["unbalanced"] if r["unbalanced"] else [])])
+
+    lines = _pairs(f"same name ({data['same_name_why']})", data["same_name"], name)
+    lines += _pairs(f"static only ({data['static_only_why']})", data["static_only"], name)
+    lines += _pairs("files not read for certain", data["files"], file)
+    lines.append(f"not seen: {data['not_seen']}")
+    out(args, data, "\n".join(lines))
     return 0
 
 
@@ -542,12 +592,19 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
                    help="add a link that opens each use in VS Code")
     p.set_defaults(func=cmd_who)
     p = sub.add_parser("impact", parents=[below], help="what a change to a name or file can reach")
-    p.add_argument("name", help="a function or variable, or a source file")
+    p.add_argument("name", help="a function or variable, a source file, or a module")
     p.add_argument("--depth", type=int, default=0, metavar="N",
                    help="how many steps (default: all)")
     p.add_argument("--up", action="store_true",
                    help="what it rests on, rather than what it reaches")
     p.set_defaults(func=cmd_impact)
+    p = sub.add_parser("path", parents=[below],
+                       help="the way one name, file or module comes to use another")
+    p.add_argument("start", help="a function or variable, a source file, or a module")
+    p.add_argument("end", help="what it comes to use, named the same ways")
+    p.set_defaults(func=cmd_path)
+    p = sub.add_parser("unresolved", parents=[below], help="each name left off the map, and why")
+    p.set_defaults(func=cmd_unresolved)
     p = sub.add_parser("issues", parents=[below],
                        help="cycles, tangled modules, links against layers")
     p.set_defaults(func=cmd_issues)

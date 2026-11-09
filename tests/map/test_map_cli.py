@@ -725,3 +725,56 @@ def test_the_agent_can_use_it_without_approval(project):
     text, is_error = call(BY_NAME["map_focus"], {"module": "net"}, str(p.root))
     assert not is_error, text
     assert json.loads(text)["module"] == "net/"
+
+
+def test_impact_starts_from_a_whole_module(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "impact", "util/", "--root", str(p.root))
+    assert out["module"] == "util/" and {r["file"] for r in out["files"]["shown"]} == {
+        "net/rx.c", "net/tx.c", "app/main.c"}
+
+
+def test_impact_names_what_it_could_not_find(project, capsys):
+    p = project(NET)
+    code, out = data(capsys, "impact", "nothing_like_this", "--root", str(p.root))
+    assert code == 1 and "no module" in out["error"]
+
+
+def test_path_gives_the_steps_and_their_symbols(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "path", "main", "ring_put", "--root", str(p.root))
+    assert out["found"] and out["steps"][0]["from"] == "app/main.c"
+    assert out["steps"][-1]["to"] == "util/ring.c" and out["steps"][-1]["via"] == ["ring_put"]
+    assert len(out["steps"]) == 2
+
+
+def test_path_between_modules(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "path", "app/", "util/", "--root", str(p.root))
+    assert out["found"] and out["steps"][0]["from_module"] == "app/"
+
+
+def test_path_says_when_only_the_other_way_exists(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "path", "ring_put", "main", "--root", str(p.root))
+    assert not out["found"] and out["steps"] == [] and out["other_way_steps"] == 2
+
+
+def test_unresolved_lists_each_name_with_where_and_why(project, capsys):
+    p = project({"a.c": b"int f(void) { return 0; }\n", "b.c": b"int f(void) { return 1; }\n",
+                 "c.c": b"int g(void) { return f() + h(); }\n",
+                 "d.c": b"static int h(void) { return 0; }\n"})
+    _, out = data(capsys, "unresolved", "--root", str(p.root))
+    same = out["same_name"]["shown"][0]
+    assert same["name"] == "f" and same["users"] == 1 and same["used_by"] == ["c.c"]
+    assert [d["file"] for d in same["defined"]] == ["a.c", "b.c"]
+    assert same["defined"][0]["line"] == 1
+    assert out["static_only"]["shown"][0]["name"] == "h" and "static" in out["static_only_why"]
+
+
+def test_unresolved_names_the_files_it_could_not_read_for_certain(project, capsys):
+    p = project({"a.c": b"#ifdef X\nint f(void) { return 0; }\n#endif\n",
+                 "b.c": b"int g(void) { return 0; }\n"})
+    _, out = data(capsys, "unresolved", "--root", str(p.root))
+    assert [r["file"] for r in out["files"]["shown"]] == ["a.c"]
+    assert out["files"]["shown"][0]["inside_if"] == 1

@@ -197,14 +197,23 @@ TOOLS = [
                           "by_dir": _b("group by folder even when archives are known")},
          ("name",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
          positional=("name",)),
-    Tool("map_impact", "What a change to a function, variable or file can reach, level by level "
-         "(with up: what it rests on), and what the build makes again.",
-         ["map", "impact"], {"name": _s("a function or variable, or a source file"),
+    Tool("map_impact", "What a change to a function, variable, file or module can reach, level "
+         "by level (with up: what it rests on), and what the build makes again.",
+         ["map", "impact"], {"name": _s("a function or variable, a source file, or a module"),
                              "depth": _i("how many steps (default: all)"),
                              "up": _b("what it rests on instead"),
                              "top": _i("rows per list (default 30)")},
          ("name",), options={"depth": "--depth", "top": "--top"}, switches={"up": "--up"},
          positional=("name",)),
+    Tool("map_path", "The shortest way one function, file or module comes to use another, with "
+         "the symbols on each step.",
+         ["map", "path"], {"start": _s("a function or variable, a source file, or a module"),
+                           "end": _s("what it comes to use, named the same ways")},
+         ("start", "end"), positional=("start", "end")),
+    Tool("map_unresolved", "Each name left off the map and why (several definitions, or static "
+         "only), and the files that cannot be read for certain.",
+         ["map", "unresolved"], {"top": _i("rows per list (default 30)")},
+         options={"top": "--top"}),
     Tool("map_issues", "Where the design looks strained: cycles, tangled modules, modules used "
          "by or using many, links against map.layers. Places to look, not verdicts.",
          ["map", "issues"], {"top": _i("rows per list (default 30)")}, options={"top": "--top"}),

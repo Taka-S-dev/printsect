@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict, deque
 from typing import Any
 
-from .model import Map, _capped
+from .model import NOT_SEEN, Map, _capped
 
 SNAPSHOT_VERSION = 1
 SHOWN = 5
@@ -60,6 +60,79 @@ def impact(code_map: Map, files: list[str], symbol: str | None, depth: int, up: 
             "modules": dict(Counter(r["module"] for r in rows).most_common()),
             "files": _capped(rows, top), "not_seen": "calls through a function pointer or "
             "inside a header's macro, so this can be too short"}
+
+
+def _chain(table: dict[str, list[tuple[str, list[str]]]], starts: list[str],
+           ends: set[str]) -> list[tuple[str, str, list[str]]] | None:
+    """The shortest run of links from a start to an end; None when there is none."""
+    came: dict[str, tuple[str, list[str]] | None] = dict.fromkeys(starts)
+    queue = deque(starts)
+    while queue:
+        file = queue.popleft()
+        if file in ends:
+            steps = []
+            while (step := came[file]) is not None:
+                steps.append((step[0], file, step[1]))
+                file = step[0]
+            return steps[::-1]
+        for other, symbols in table.get(file, []):
+            if other not in came:
+                came[other] = (file, symbols)
+                queue.append(other)
+    return None
+
+
+def path(code_map: Map, starts: list[str], ends: list[str]) -> dict[str, Any]:
+    """How the first set of files comes to use the second, shortest way first."""
+    _, uses = _links(code_map)
+    steps = _chain(uses, starts, set(ends))
+    back = _chain(uses, ends, set(starts)) if steps is None else None
+    return {"found": steps is not None,
+            "steps": [{"from": a, "from_module": code_map._module_of(a), "to": b,
+                       "to_module": code_map._module_of(b), "via": names[:SHOWN],
+                       "more_via": max(0, len(names) - SHOWN)} for a, b, names in steps or []],
+            "other_way_steps": None if back is None else len(back), "not_seen": NOT_SEEN}
+
+
+def unresolved(code_map: Map, top: int) -> dict[str, Any]:
+    """Every name left off the map and why, and the files it cannot read for certain."""
+    definers: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    statics: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    entries = code_map.t.entries
+    for file in code_map.t.files:
+        for symbol, _kind, static, line in entries[file].defs:
+            (statics if static else definers)[symbol].append({"file": file, "line": line})
+    users: dict[str, list[str]] = defaultdict(list)
+    for file in code_map.t.files:
+        for symbol in entries[file].refs:
+            if len(definers.get(symbol, ())) > 1 or (symbol not in definers and symbol in statics):
+                users[symbol].append(file)
+
+    def row(name: str, where: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"name": name, "defined": where[:SHOWN], "more_defined": max(0, len(where) - SHOWN),
+                "users": len(users[name]), "used_by": users[name][:SHOWN]}
+
+    def ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(rows, key=lambda r: (-r["users"], r["name"]))
+
+    files: list[dict[str, Any]] = [
+             {"file": f, "macro_made": e.macro_defs, "unbalanced": e.unbalanced,
+              "too_long": e.too_long, "inside_if": e.inside_if}
+             for f in code_map.t.files
+             if (e := entries[f]).macro_defs or e.unbalanced or e.too_long or e.inside_if]
+    files.sort(key=lambda r: (-(r["macro_made"] + r["too_long"] + r["inside_if"]), r["file"]))
+    return {"same_name": _capped(ordered([row(n, w) for n, w in definers.items() if len(w) > 1]),
+                                 top),
+            "same_name_why": "defined in several files, and a file using it cannot be told "
+                             "to mean one of them",
+            "static_only": _capped(ordered([row(n, statics[n]) for n in users
+                                            if n not in definers]), top),
+            "static_only_why": "only static definitions, which C does not let another file reach",
+            "files": _capped(files, top),
+            "files_why": "macro_made: bodies whose name a macro makes; inside_if: definitions "
+                         "under an #if; unbalanced: braces did not close, so what follows the "
+                         "fault is not seen; too_long: declarations not read",
+            "not_seen": NOT_SEEN}
 
 
 def _between(code_map: Map) -> Counter[tuple[str, str]]:
