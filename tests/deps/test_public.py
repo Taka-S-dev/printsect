@@ -156,3 +156,9 @@ def test_the_page_can_group_the_map_by_what_the_build_makes(project):
     assert main(["deps", "html", "--no-open", "--root", str(p.root)]) == 0
     text = data_of(p, "deps.html")
     assert '"by_archive":{"a.c":"l.a"}' in text and '"by_output":{"a.c":"x.out"}' in text
+
+
+def test_every_output_a_file_is_grouped_under_is_masked():
+    done = mask_map({"modules": {}, "edges": [],
+                     "by_output": {"a.c": "/data/one/a.out+/data/two/b.out"}}, Masker([], False))
+    assert done["by_output"]["a.c"] == "(outside)/a.out+(outside)/b.out"

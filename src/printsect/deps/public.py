@@ -114,10 +114,19 @@ def mask_graph(graph: Graph, masker: Masker) -> Graph:
     )
 
 
+def _outputs(value: str, masker: Masker) -> str:
+    """A file that ends up in several outputs is grouped under all of them, joined by +.
+    Each is its own path, and only the start of a path is looked at for being absolute."""
+    return "+".join(masker.module(part) for part in value.split("+"))
+
+
 def mask_map(data: dict[str, Any], masker: Masker) -> dict[str, Any]:
     grouped: dict[str, Any] = {
                key: {masker.file(k): masker.module(v) for k, v in data[key].items()}
-               for key in ("modules", "by_archive", "by_output") if key in data}
+               for key in ("modules", "by_archive") if key in data}
+    if "by_output" in data:
+        grouped["by_output"] = {masker.file(k): _outputs(v, masker)
+                                for k, v in data["by_output"].items()}
     return {**grouped, "edges": [[masker.file(a), masker.file(b), masker.symbols(s)]
                       for a, b, s in data["edges"]]}
 
