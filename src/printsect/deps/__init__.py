@@ -33,11 +33,10 @@ HEADERS_OFF_NOTE = (
 
 
 def runs_unasked(settings: dict[str, Any] | None) -> bool:
-    """Whether a query may read the build by itself when nothing is read yet.
+    """Whether `psect build`, already about to run the build, may read it by itself.
 
-    Only the stock `make -n -B -w` qualifies: it is what the person would run anyway.
-    A command a project's config sets could be anything, so it runs only when asked
-    for (`psect deps`), never as a side effect of showing a tree.
+    Only the stock `make -n -B -w` qualifies. A command a project's config sets could be
+    anything, so it runs only when asked for (`psect deps`).
     """
     from .make import DEFAULT_COMMAND
 

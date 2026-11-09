@@ -29,12 +29,12 @@ build/out/netdrv.out
 | `psect-deps find PATTERN` | パスが一致するファイル。`--quickfix` でエディタ用の `file:1: chain` |
 | `psect-deps html` | ブラウザで見て検索できる、1 つで完結したページ |
 
-どのコマンドも `--json` と `--root DIR` を受け付けます。最初の `tree`、`which`、`find`、`html` は、
-まだ何も読んでいなければ自分でビルドを読みますが、それは既定の `make -n -B -w` のときだけです。
-プロジェクトが設定した `deps.command` は、明示的な `psect-deps` でだけ実行されます。その後 Makefile や
-設定が変わっていれば知らせるので、`psect-deps` をもう一度実行します。
+どのコマンドも `--json` と `--root DIR` を受け付けます。ビルドを読むのは `psect-deps` 自身だけです。
+`tree`、`which`、`find`、`html` は保存した内容から答え、make を実行しません。`make -n` でも Makefile の
+`$(shell …)` は実行されるからです。その後 Makefile や設定が変わっていれば知らせるので、`psect-deps` を
+もう一度実行します。
 
-試すには：`psect-deps tree --root examples/demo`。
+試すには：`psect-deps --root examples/demo` のあと、`psect-deps tree --root examples/demo`。
 
 ## ビルドの読み方
 

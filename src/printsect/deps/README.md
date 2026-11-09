@@ -30,13 +30,12 @@ build/out/netdrv.out
 | `psect-deps find PATTERN` | Files whose path matches; `--quickfix` gives `file:1: chain` for editors |
 | `psect-deps html` | One self-contained page to browse and search in a browser |
 
-Every command takes `--json` and `--root DIR`. The first `tree`, `which`, `find` or
-`html` reads the build by itself when there is nothing read yet, but only with the
-stock `make -n -B -w`: a `deps.command` the project sets runs only through an explicit
-`psect-deps`. When a Makefile or the config has changed since, they say so; run
-`psect-deps` again.
+Every command takes `--json` and `--root DIR`. Only `psect-deps` itself reads the
+build; `tree`, `which`, `find` and `html` answer from what it saved and never run make,
+because even `make -n` runs a Makefile's `$(shell …)`. When a Makefile or the config has
+changed since, they say so; run `psect-deps` again.
 
-Try it: `psect-deps tree --root examples/demo`.
+Try it: `psect-deps --root examples/demo`, then `psect-deps tree --root examples/demo`.
 
 ## How it reads a build
 

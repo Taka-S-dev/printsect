@@ -183,5 +183,6 @@ Claude Code なら、権限の設定で `Makefile`、`*.mk`、ビルド用のス
 `examples/demo` の架空のプロジェクトで試せます：
 
 ```sh
+psect-deps --root examples/demo
 psect-deps tree --root examples/demo
 ```

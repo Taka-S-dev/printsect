@@ -185,7 +185,8 @@ TOOLS = [
                             "by_dir": _b("group by folder even when archives are known")},
          ("module",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
          positional=("module",)),
-    Tool("deps_scan", "Read the build again (after a Makefile or deps settings changed).",
+    Tool("deps_scan", "Read the build: once before the deps_ tools, and again after a Makefile "
+         "or deps settings changed.",
          ["deps"]),
     Tool("console_read", "Console lines after line `since` (pass the last number you saw).",
          ["console", "read"], {"since": _i("last line number already read (0 = all kept)")},
@@ -227,7 +228,8 @@ TOOLS = [
 BY_NAME = {t.name: t for t in TOOLS}
 
 
-# Tools that can run commands written in the settings (build, deploy, deps, console).
+# Tools that run commands written in the settings (build, deploy, deps, console), or
+# answer from what such a command saved (the deps_ questions).
 RUNS_SETTINGS = {"run", "deps_scan", "build_plan", "console_read", "console_send",
                  "console_wait", "deps_which", "deps_find", "deps_tree"}
 

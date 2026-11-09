@@ -8,6 +8,7 @@ import pytest
 
 from printsect.cli import main
 from printsect.deps import load, make_scanner, save
+from printsect.deps import make as make_module
 from printsect.deps.graph import Graph
 from printsect.deps.makelog import split_commands
 from printsect.deps.search import Matcher
@@ -191,6 +192,20 @@ def test_queries_do_not_run_a_command_the_project_sets(project, capsys):
     assert main(["deps", "tree", "--root", str(p.root)]) == 1
     assert "run psect deps first" in capsys.readouterr().err
     assert not (p.root / marker).exists()  # nothing ran
+
+
+@pytest.mark.parametrize("question", [["tree"], ["which", "src/net/rx.c"], ["find", "rx"],
+                                      ["html", "--no-open"]])
+def test_a_question_does_not_read_the_build_by_itself(project, capsys, monkeypatch, question):
+    # make -n still runs $(shell ...) in a Makefile, so even the stock command stays asked for.
+    def ran(*args, **kwargs):
+        raise AssertionError("a command ran")
+
+    monkeypatch.setattr(make_module.subprocess, "run", ran)
+    p = project(FILES)
+    assert main(["deps", *question, "--root", str(p.root)]) == 1
+    assert "run psect deps first" in capsys.readouterr().err
+    assert not (p.root / ".printsect" / "deps.json").exists()
 
 
 def test_failing_build_command_is_reported(project, capsys):

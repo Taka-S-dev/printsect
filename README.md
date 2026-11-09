@@ -198,5 +198,6 @@ scripts in the permission settings.
 Try it on the made-up project in `examples/demo`:
 
 ```sh
+psect-deps --root examples/demo
 psect-deps tree --root examples/demo
 ```

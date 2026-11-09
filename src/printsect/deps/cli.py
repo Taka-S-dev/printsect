@@ -33,23 +33,12 @@ def no_marks(project: Project) -> dict[str, list[dict[str, Any]]]:
 
 
 def _load(args: argparse.Namespace, proj: Project) -> Graph:
-    from . import DEPS_FILE, load, make_scanner, runs_unasked, save
+    from . import DEPS_FILE, load
 
     if not proj.state_file(DEPS_FILE).is_file():
-        settings = proj.settings.get("deps")
-        if not runs_unasked(settings):
-            raise PsectError(
-                f"no dependency data yet. This project sets its own deps.command "
-                f"({(settings or {}).get('command')!r}), which is run only when asked: "
-                f"run {args.deps_name} first")
-        # First use: read the build now rather than send the person off to do it.
-        print(f"note: no dependency data yet; reading the build ({args.deps_name}) ...",
-              file=sys.stderr)
-        graph = make_scanner(proj.settings.get("deps")).scan(proj)
-        save(proj, graph)
-        for w in graph.warnings:
-            print(f"warning: {w}", file=sys.stderr)
-        return graph
+        # Reading the build runs code even with make -n: $(shell ...) in a Makefile runs.
+        # So a question never does it on the side; only the command that says so does.
+        raise PsectError(f"no dependency data yet: run {args.deps_name} first to read the build")
     graph = load(proj)
     stale = graph.stale_inputs(proj.root)
     if stale:
