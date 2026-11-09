@@ -38,6 +38,16 @@ changed since, they say so; run `psect-deps` again.
 
 Try it: `psect-deps --root examples/demo`, then `psect-deps tree --root examples/demo`.
 
+The page has five views. **Outputs** and **Headers** are the tree and the header table.
+**Graph** draws the parts: zoom, pan, drag a part, a minimap, four layouts, filters by kind,
+stage or status, upstream or downstream of the picked part to a depth you choose, and the
+ways through it picked out (inputs in one colour, outputs dashed in another). **Modules** is
+the same drawing of who uses whom, when printsect made the page with the map. **Status** lists
+everything not read for certain, and why. Picking a part shows what it is made from, where
+it goes, and what a change to it makes again; Compare sets parts side by side. Keys: `/`
+search; in the tree, arrows and Enter; in the graph, arrows, `+`, `-`, `0`. The graph saves as
+JSON, SVG or PNG, and Save view keeps the filters by name.
+
 ## How it reads a build
 
 1. **Make prints what it would run.** `make -n -B -w` lists every command of a full
@@ -132,4 +142,4 @@ without it the reader checks its own.
 | `search.py` | `Matcher`: text, glob or regex |
 | `tree.py` | The tree and `which` as text |
 | `markdown.py` | `DEPS.md` |
-| `html.py`, `viewer.html` | The browser page and its template |
+| `html.py`, `viewer.html`, `viewer_graph.js` | The browser page, its template and its graph |

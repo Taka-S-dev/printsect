@@ -68,19 +68,45 @@ def render_html(
     *,
     name: str,
     stale: list[str] | None = None,
+    map_data: dict[str, Any] | None = None,
+    public: str = "",
 ) -> str:
-    data = {
+    return render_data(page_data(graph, probes, name=name, stale=stale, map_data=map_data,
+                                 public=public), name)
+
+
+def page_data(
+    graph: Graph,
+    probes: dict[str, list[dict[str, Any]]],
+    *,
+    name: str,
+    stale: list[str] | None = None,
+    map_data: dict[str, Any] | None = None,
+    public: str = "",
+) -> dict[str, Any]:
+    """What goes into the page, kept apart so a public copy can be checked first."""
+    return {
         "name": name,
         "generated": graph.generated,
         "command": graph.command,
         "probes": probes,
         "stale": stale or [],
         "headers_traced": graph.headers_traced,
+        "map": map_data,
+        "public": public,
         **_compact(graph),
     }
+
+
+def embedded(data: dict[str, Any]) -> str:
+    return _embed(data)
+
+
+def render_data(data: dict[str, Any], name: str) -> str:
     return (
-        _template().replace("__TITLE__", html.escape(f"{name} - build dependencies"))
-        .replace("__DATA__", _embed(data))
+        _template().replace("__GRAPH_JS__", _script())
+        .replace("__TITLE__", html.escape(f"{name} - build dependencies"))
+        .replace("__DATA__", _embed(data))  # last: nothing in the data can act as a marker
     )
 
 
@@ -88,3 +114,9 @@ def render_html(
 def _template() -> str:
     """viewer.html, shipped inside the package next to this module."""
     return files(__package__).joinpath("viewer.html").read_text(encoding="utf-8")
+
+
+@cache
+def _script() -> str:
+    """The graph part of the page, kept apart because it is most of the code."""
+    return files(__package__).joinpath("viewer_graph.js").read_text(encoding="utf-8")

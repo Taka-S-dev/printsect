@@ -11,6 +11,7 @@
   --accent: #2f6fd6; --hit-bg: #ffe58a; --hit-text: #1d2125; --probe: #0f7b6c;
   --probe-bg: #e3f5f1; --warn-bg: #fff4d6; --warn-text: #6b4e00; --sel: #e8f0fd;
   --out: #8a4fd6; --archive: #b8650f; --object: #2f6fd6; --header: #5f6b76;
+  --in: #0f7b6c; --go: #b8650f;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -19,6 +20,7 @@
     --accent: #7aa7f5; --hit-bg: #7a5d00; --hit-text: #fff3c4; --probe: #5fd3bf;
     --probe-bg: #143a34; --warn-bg: #3a2e0a; --warn-text: #f3d68a; --sel: #1f2d44;
     --out: #b892f0; --archive: #e3a35a; --object: #7aa7f5; --header: #9aa5b1;
+    --in: #5fd3bf; --go: #e3a35a;
     color-scheme: dark;
   }
 }
@@ -27,8 +29,19 @@
   --accent: #7aa7f5; --hit-bg: #7a5d00; --hit-text: #fff3c4; --probe: #5fd3bf;
   --probe-bg: #143a34; --warn-bg: #3a2e0a; --warn-text: #f3d68a; --sel: #1f2d44;
   --out: #b892f0; --archive: #e3a35a; --object: #7aa7f5; --header: #9aa5b1;
+  --in: #5fd3bf; --go: #e3a35a;
   color-scheme: dark;
 }
+:root[data-theme="contrast"] {
+  --bg: #000000; --panel: #000000; --text: #ffffff; --muted: #ffffff; --line: #ffffff;
+  --accent: #ffff00; --hit-bg: #ffff00; --hit-text: #000000; --probe: #00ff00;
+  --probe-bg: #000000; --warn-bg: #000000; --warn-text: #ffff00; --sel: #003a80;
+  --out: #ff80ff; --archive: #ffc000; --object: #80c0ff; --header: #ffffff;
+  --in: #00ff00; --go: #ffc000;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+[hidden] { display: none !important; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
@@ -88,6 +101,38 @@ table.h th { color: var(--muted); font-weight: 600; font-size: 12px; }
 table.h tr.selected td { background: var(--sel); }
 table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; cursor: pointer; }
 .meta { overflow-wrap: anywhere; }
+#left.graph { padding: 0; overflow: hidden; }
+.stage { position: relative; width: 100%; height: 100%; touch-action: none; outline: none; }
+.stage:focus-visible, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#mini { position: absolute; right: 8px; bottom: 8px; background: var(--panel); border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.gnote { position: absolute; left: 8px; top: 8px; right: 200px; margin: 0; }
+.node { cursor: pointer; }
+.node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+.node text { fill: var(--text); font: 12px ui-monospace, Consolas, monospace; }
+.node .tag { font-weight: 700; font-size: 10px; }
+.node.out rect { stroke: var(--out); stroke-width: 2; }
+.node.archive rect { stroke: var(--archive); stroke-width: 1.6; }
+.node.object rect { stroke: var(--object); }
+.node.module rect { stroke: var(--accent); stroke-width: 1.6; }
+.node.unsure rect { stroke-dasharray: 4 3; }
+.node.dim { opacity: .25; }
+.node.in rect { stroke: var(--in); stroke-width: 2; }
+.node.go rect { stroke: var(--go); stroke-width: 2; }
+.node.focus rect { stroke: var(--accent); stroke-width: 3; fill: var(--sel); }
+.node.hit rect { fill: var(--hit-bg); }
+.node.hit text { fill: var(--hit-text); }
+.edge { fill: none; stroke: var(--muted); stroke-width: 1; }
+.edge.dim { opacity: .12; }
+.edge.in { stroke: var(--in); stroke-width: 2; }
+.edge.go { stroke: var(--go); stroke-width: 2; stroke-dasharray: 6 3; }
+.ehit { fill: none; stroke: transparent; stroke-width: 9; cursor: pointer; }
+.count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.opt select, .opt input[type=number] { font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
+.opt input[type=number] { width: 4em; }
+.n { color: var(--muted); font-size: 12px; }
+.st { flex: none; font-size: 11px; color: var(--warn-text); background: var(--warn-bg); border-radius: 3px; padding: 0 4px; }
+.public { margin: 8px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--sel); font-size: 13px; }
+.same { display: flex; gap: 6px; align-items: center; }
 @media (max-width: 760px) {
   .bar { gap: 8px 10px; }
   .search { flex: 1 1 100%; order: -1; }
@@ -102,22 +147,60 @@ table.h td { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fo
 <header>
   <h1 id="title"></h1>
   <div class="meta" id="meta"></div>
+  <div class="public" id="public" hidden></div>
   <div class="warn" id="stale" hidden></div>
 </header>
 <div class="bar">
   <div class="tabs" role="tablist">
     <button role="tab" id="tab-tree" aria-selected="true">Outputs</button>
     <button role="tab" id="tab-headers" aria-selected="false">Headers</button>
+    <button role="tab" id="tab-graph" aria-selected="false">Graph</button>
+    <button role="tab" id="tab-modules" aria-selected="false" hidden>Modules</button>
+    <button role="tab" id="tab-status" aria-selected="false">Status</button>
   </div>
   <div class="search">
     <input type="search" id="q" placeholder="Search files: text, *.h, or a regex  ( / )" autocomplete="off" spellcheck="false" aria-label="Search files">
     <label class="opt"><input type="checkbox" id="o-regex"> regex</label>
+    <button class="small" id="prev" hidden aria-label="previous match">◀</button>
+    <span class="count" id="count" hidden></span>
+    <button class="small" id="next" hidden aria-label="next match">▶</button>
   </div>
   <label class="opt"><input type="checkbox" id="o-sources"> .c names</label>
   <label class="opt"><input type="checkbox" id="o-headers"> all headers</label>
   <label class="opt"><input type="checkbox" id="o-probed"> probed only</label>
   <button class="small" id="expand">Expand all</button>
   <button class="small" id="collapse">Collapse</button>
+  <button class="small" id="theme" title="Change the colours">Theme: auto</button>
+</div>
+<div class="bar" id="gbar" hidden>
+  <span id="g-kinds" class="same" role="group" aria-label="Kinds of part">
+    <label class="opt"><input type="checkbox" value="out"> outputs</label>
+    <label class="opt"><input type="checkbox" value="archive"> libraries</label>
+    <label class="opt"><input type="checkbox" value="object"> objects</label>
+    <label class="opt"><input type="checkbox" value="header"> headers</label>
+    <label class="opt"><input type="checkbox" value="made"> generated</label>
+    <label class="opt"><input type="checkbox" value="input"> inputs</label>
+    <label class="opt"><input type="checkbox" value="deploy"> deployed</label>
+  </span>
+  <label class="opt">stage <select id="g-stage">
+    <option value="">any</option><option value="object,header,made,input">sources</option>
+    <option value="archive">libraries</option><option value="out,deploy">final</option></select></label>
+  <label class="opt"><input type="checkbox" id="g-unres"> unresolved only</label>
+  <label class="opt">show <select id="g-dir">
+    <option value="all">everything</option><option value="up">upstream of the pick</option>
+    <option value="down">downstream of the pick</option><option value="both">both ways</option></select></label>
+  <label class="opt">depth <input type="number" id="g-depth" min="0" value="0" title="0 follows it all"></label>
+  <label class="opt">layout <select id="g-layout">
+    <option value="lr">left to right</option><option value="tb">top to bottom</option>
+    <option value="tree">hierarchy</option><option value="force">force</option></select></label>
+  <button class="small" id="zout" aria-label="zoom out">−</button>
+  <button class="small" id="zin" aria-label="zoom in">+</button>
+  <button class="small" id="zfit">Fit</button>
+  <button class="small" id="xjson">JSON</button>
+  <button class="small" id="xsvg">SVG</button>
+  <button class="small" id="xpng">PNG</button>
+  <button class="small" id="save">Save view</button>
+  <label class="opt">views <select id="views"><option value="">-</option></select></label>
 </div>
 <main>
   <div id="left"></div>
@@ -177,6 +260,40 @@ for (const [o, info] of Object.entries(objects)) {
   for (const h of info.headers) { push(users, h, o); push(headerUsers, h, o); }
 }
 const probesOf = (f) => (f && D.probes[f]) || [];
+const statusMap = new Map(D.status.map(([p, s]) => [P[p], s]));
+const excludedWhy = new Map(D.excluded.map(([p, why]) => [P[p], why]));
+const madeOf = new Map(D.made.map(([g, from, by]) => [P[g], { from: from.map(at), by: by < 0 ? null : P[by] }]));
+const copiesOf = new Map(D.copies.map(([target, source]) => [target, P[source]]));
+const deployedFrom = new Map();
+for (const [target, source] of copiesOf) push(deployedFrom, source, target);
+const inputsOf = new Set();
+for (const info of madeOf.values()) { info.from.forEach((x) => inputsOf.add(x)); if (info.by) inputsOf.add(info.by); }
+const kindAny = (p) => kindOf(p) || (madeOf.has(p) ? "made" : headerUsers.has(p) ? "header"
+  : copiesOf.has(p) ? "deploy" : inputsOf.has(p) ? "input" : null);
+function statusOf(p) {
+  if (excludedWhy.has(p)) return "excluded";
+  if (statusMap.has(p)) return statusMap.get(p);
+  return headerUsers.has(p) && D.default_status === "build" ? "inferred" : D.default_status;
+}
+function impactOf(path) {
+  const reached = new Set(), made = [];
+  const files = [path], seen = new Set([path]);
+  while (files.length) {
+    const f = files.pop();
+    for (const s of startsOf(f)) reached.add(s);
+    for (const [g, info] of madeOf) {
+      if ((info.from.includes(f) || info.by === f) && !seen.has(g)) { seen.add(g); made.push(g); files.push(g); }
+    }
+  }
+  const stack = [...reached];
+  while (stack.length) for (const p of parents.get(stack.pop()) || []) {
+    if (!reached.has(p)) { reached.add(p); stack.push(p); }
+  }
+  reached.delete(path);
+  const some = (table) => [...reached].filter((p) => p in table).sort();
+  const deployed = [...copiesOf].filter(([, s]) => reached.has(s) || seen.has(s)).map(([t]) => t).sort();
+  return { made, objects: some(objects), archives: some(archives), outs: some(outs), deployed };
+}
 
 const rootsMemo = new Map();
 function rootsOf(node) {
@@ -261,8 +378,23 @@ function spansOf(s, rx) {
 const state = {
   view: "tree", q: "", regex: false, sources: false, headers: false, probed: false,
   selected: null, opened: new Set(), closed: new Set(), fold: "auto",  // auto | all | none
+  theme: "auto", gdir: "all", gdepth: 0, glayout: "lr", gunres: false,
+  gkinds: new Set(["out", "archive", "object", "made", "input", "deploy"]), pins: [],
 };
-const KEPT = ["view", "regex", "sources", "headers", "probed"];
+const KEPT = ["view", "regex", "sources", "headers", "probed", "theme", "glayout"];
+const OPEN_KEY = "psect-deps-open:" + D.name;
+const OPEN_MAX = 2000;  // branches remembered between visits
+try {
+  const open = JSON.parse(localStorage.getItem(OPEN_KEY) || "{}");
+  for (const k of open.opened || []) state.opened.add(k);
+  for (const k of open.closed || []) state.closed.add(k);
+} catch (e) { /* storage may be blocked */ }
+function rememberOpen() {
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify({ opened: [...state.opened].slice(-OPEN_MAX),
+      closed: [...state.closed].slice(-OPEN_MAX) }));
+  } catch (e) { /* storage may be blocked */ }
+}
 try {
   const saved = JSON.parse(localStorage.getItem("psect-deps") || "{}");
   for (const k of KEPT) if (k in saved) state[k] = saved[k];
@@ -346,6 +478,12 @@ function probeChip(list) {
   return chip;
 }
 const KIND_TAG = { out: "OUT", archive: "LIB", object: "OBJ", header: "H" };
+const NOT_SURE = ["unresolved", "excluded", "inferred"];
+function statusChip(path) {
+  const s = statusOf(path);
+  if (!NOT_SURE.includes(s) || s === "inferred") return null;
+  return el("span", "st", s);
+}
 
 function renderTree(M) {
   const left = $("left");
@@ -381,6 +519,7 @@ function renderTree(M) {
       }
     }
     const row = el("div", "row");
+    row.tabIndex = 0;
     row.dataset.path = n.path;
     if (n.source) row.dataset.src = n.source;
     if (state.selected === n.path || (n.source && state.selected === n.source)) {
@@ -392,6 +531,12 @@ function renderTree(M) {
     const label = el("span", "lbl");
     label.append(highlighted(labelFor(n), M));
     row.append(label);
+    if (has) {
+      const many = n.lazyHeaders ? n.lazyHeaders.length : n.children.length;
+      row.append(el("span", "n", "(" + many + ")"));
+    }
+    const chip = statusChip(n.path);
+    if (chip) row.append(chip);
     if (n.probes.length) row.append(probeChip(n.probes));
     row.addEventListener("click", () => select(n.kind === "object" && n.source ? n.source : n.path));
     li.append(row);
@@ -416,6 +561,7 @@ function renderTree(M) {
         tw.textContent = nowOpen ? "▾" : "▸";
         (nowOpen ? state.opened : state.closed).add(key);
         (nowOpen ? state.closed : state.opened).delete(key);
+        rememberOpen();
       });
     }
     parent.append(li);
@@ -490,6 +636,7 @@ function renderDetails() {
   const right = $("right");
   right.replaceChildren();
   const p = state.selected;
+  if (p && state.view === "modules" && renderModule(right, p)) return;
   if (!p) {
     right.append(el("h2", "", "Pick a file"));
     right.append(el("p", "hint", "Click a row to see what it is built from and what it is built "
@@ -509,7 +656,17 @@ function renderDetails() {
       setTimeout(() => { copy.textContent = "Copy path"; }, 1200);
     }, () => {});
   });
-  right.append(copy);
+  const compare = el("button", "small", state.pins.includes(p) ? "Stop comparing" : "Compare");
+  compare.addEventListener("click", () => {
+    state.pins = state.pins.includes(p) ? state.pins.filter((x) => x !== p) : [...state.pins, p].slice(-4);
+    renderDetails();
+  });
+  right.append(" ", copy, " ", compare);
+  const s = statusOf(p);
+  const why = excludedWhy.get(p);
+  right.append(el("p", "hint", "Status: " + s + (why ? " (" + why + ")" : "")
+    + " · read from " + (D.command || "?")));
+  renderCompare(right);
 
   const probes = probesOf(p);
   if (probes.length) {
@@ -539,6 +696,26 @@ function renderDetails() {
     }
     if (chains.length > shown) right.append(el("p", "hint", "… more ways; the outputs above are complete."));
   }
+
+  const goesInto = parents.get(nodeFor(p) || p) || [];
+  if (goesInto.length) {
+    right.append(el("h3", "", "Goes directly into (" + goesInto.length + ")"));
+    right.append(list(goesInto, (x) => [go(x)]));
+  }
+  const gen = madeOf.get(p);
+  if (gen) {
+    right.append(el("h3", "", "Generated"));
+    const parts = gen.from.map((x) => [go(x)]);
+    right.append(list(parts, (x) => x));
+    if (gen.by) right.append(el("p", "hint", "by " + gen.by));
+  }
+  const sentTo = [...(deployedFrom.get(p) || []), ...(deployedFrom.get(nodeFor(p)) || [])];
+  if (sentTo.length) {
+    right.append(el("h3", "", "Deployed to"));
+    right.append(list(sentTo, (x) => [x]));
+  }
+  renderImpact(right, p);
+  renderUses(right, p);
 
   const own = (users.get(p) || []).filter((o) => objects[o].source === p);
   if (kindOf(p) === "object") own.push(p);
@@ -571,9 +748,70 @@ function renderDetails() {
   }
 }
 
+function renderImpact(right, p) {
+  const hit = impactOf(p);
+  const total = hit.objects.length + hit.archives.length + hit.outs.length;
+  if (!total && !hit.deployed.length) return;
+  right.append(el("h3", "", "A change here makes again"));
+  const line = [hit.made.length + " generated", hit.objects.length + " objects",
+    hit.archives.length + " libraries", hit.outs.length + " outputs",
+    hit.deployed.length + " deployed"].join(" · ");
+  right.append(el("p", "", line));
+  right.append(list([...hit.outs, ...hit.deployed], (x) => (kindAny(x) ? [go(x)] : [x])));
+}
+function renderCompare(right) {
+  if (state.pins.length < 2) return;
+  right.append(el("h3", "", "Compared (" + state.pins.length + ")"));
+  const sets = state.pins.map((p) => new Set(rootsForFile(p)));
+  const common = [...sets[0]].filter((r) => sets.every((s) => s.has(r)));
+  right.append(el("p", "", "Built into all of them: " + (common.join(", ") || "nothing")));
+  state.pins.forEach((p, i) => {
+    const only = [...sets[i]].filter((r) => !common.includes(r));
+    const row = el("div", "chain");
+    row.append(go(p), " only: " + (only.join(", ") || "-"));
+    right.append(row);
+  });
+}
+let usesMemo = null;
+function usesIndex() {
+  if (usesMemo || !D.map) return usesMemo;
+  usesMemo = { out: new Map(), in: new Map() };
+  for (const [user, definer, symbols] of D.map.edges) {
+    push(usesMemo.out, user, [definer, symbols]);
+    push(usesMemo.in, definer, [user, symbols]);
+  }
+  return usesMemo;
+}
+function renderUses(right, p) {
+  const index = usesIndex();
+  if (!index) return;
+  for (const [title, table] of [["Uses in the source", index.out], ["Used in the source by", index.in]]) {
+    const rows = table.get(p);
+    if (!rows) continue;
+    right.append(el("h3", "", title + " (" + rows.length + ")"));
+    right.append(list(rows, ([f, symbols]) => [go(f), " " + symbols.slice(0, 5).join(", ")]));
+  }
+}
+function renderModule(right, p) {
+  const m = moduleData();
+  if (!m.groups.has(p)) return false;
+  right.append(el("h2", "mono", p));
+  const usedBy = m.edges.filter((e) => e.a === p), uses = m.edges.filter((e) => e.b === p);
+  const add = (title, rows, side) => {
+    right.append(el("h3", "", title + " (" + rows.length + ")"));
+    right.append(list(rows, (e) => [e[side] + "  " + e.count]));
+  };
+  add("Used by", usedBy, "b");
+  add("Uses", uses, "a");
+  right.append(el("h3", "", "Files (" + m.groups.get(p).length + ")"));
+  right.append(list(m.groups.get(p), (f) => [f]));
+  return true;
+}
+
 // Picking a file only changes the marks and the right side; the tree is not redrawn.
 function select(path) {
   state.selected = path;
+  if (state.view === "graph" || state.view === "modules") { render(); return; }
   document.querySelectorAll("#left .selected").forEach((e) => e.classList.remove("selected"));
   document.querySelectorAll("#left [data-path]").forEach((e) => {
     if (e.dataset.path === path || e.dataset.src === path) e.classList.add("selected");
@@ -582,7 +820,10 @@ function select(path) {
   writeHash();
 }
 
+__GRAPH_JS__
+
 // ---- wiring ------------------------------------------------------------------
+const VIEWS = ["tree", "headers", "graph", "modules", "status"];
 function render() {
   let M = null;
   const q = $("q");
@@ -590,11 +831,19 @@ function render() {
   q.title = "";
   try { M = makeMatcher(state.q.trim(), state.regex); }
   catch (e) { q.classList.add("bad"); q.title = String(e.message || e); }
-  $("tab-tree").setAttribute("aria-selected", String(state.view === "tree"));
-  $("tab-headers").setAttribute("aria-selected", String(state.view === "headers"));
+  for (const v of VIEWS) $("tab-" + (v)).setAttribute("aria-selected", String(state.view === v));
+  const drawing = state.view === "graph" || state.view === "modules";
+  $("left").classList.toggle("graph", drawing);
+  $("gbar").hidden = !drawing;
+  $("g-kinds").hidden = state.view === "modules";
   for (const id of ["o-sources", "o-headers"]) $(id).parentElement.hidden = state.view !== "tree";
   $("expand").hidden = $("collapse").hidden = state.view !== "tree";
-  if (state.view === "tree") renderTree(M); else renderHeaders(M);
+  $("o-probed").parentElement.hidden = !["tree", "headers"].includes(state.view);
+  if (drawing) renderGraph(M);
+  else if (state.view === "status") renderStatus(M);
+  else if (state.view === "tree") renderTree(M);
+  else renderHeaders(M);
+  showCount();
   renderDetails();
   writeHash();
 }
@@ -606,19 +855,54 @@ function writeHash() {
   if (state.view !== "tree") h.set("view", state.view);
   if (state.q) h.set("q", state.q);
   if (state.selected) h.set("file", state.selected);
+  if (state.gdir !== "all") h.set("dir", state.gdir);
+  if (state.gdepth) h.set("depth", state.gdepth);
+  if (state.gunres) h.set("unres", "1");
+  if (state.glayout !== "lr") h.set("layout", state.glayout);
+  if (state.view === "graph") h.set("kinds", [...state.gkinds].join(","));
   const text = h.toString();
   try { history.replaceState(null, "", text ? "#" + text : location.pathname); }
   catch (e) { /* some browsers refuse this for local files */ }
 }
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
-  if (h.has("view")) state.view = h.get("view") === "headers" ? "headers" : "tree";
+  if (h.has("view") && VIEWS.includes(h.get("view"))) state.view = h.get("view");
+  state.gdir = h.get("dir") || "all";
+  state.gdepth = Number(h.get("depth")) || 0;
+  state.gunres = h.has("unres");
+  if (h.has("layout")) state.glayout = h.get("layout");
+  if (h.has("kinds")) state.gkinds = new Set(h.get("kinds").split(",").filter(Boolean));
+  if (state.view === "modules" && !D.map) state.view = "tree";
+  syncControls();
   state.q = h.get("q") || "";
   state.selected = h.get("file") || null;
   $("q").value = state.q;
 }
+function syncControls() {
+  $("g-dir").value = state.gdir;
+  $("g-depth").value = state.gdepth;
+  $("g-unres").checked = state.gunres;
+  $("g-layout").value = state.glayout;
+  document.querySelectorAll("#g-kinds input").forEach((box) => { box.checked = state.gkinds.has(box.value); });
+}
 window.addEventListener("hashchange", () => { readHash(); render(); });
 
+if (D.map) $("tab-modules").hidden = false;
+if (D.public) {
+  $("public").hidden = false;
+  $("public").textContent = "Public copy: " + D.public;
+}
+const THEMES = ["auto", "light", "dark", "contrast"];
+function applyTheme() {
+  if (state.theme === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = state.theme;
+  $("theme").textContent = "Theme: " + state.theme;
+}
+$("theme").addEventListener("click", () => {
+  state.theme = THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length];
+  applyTheme(); remember(); render();
+});
+applyTheme();
 $("title").textContent = D.name + " — build dependencies";
 $("meta").textContent = [
   finals.length + " outputs", Object.keys(archives).length + " archives",
@@ -652,7 +936,73 @@ $("q").addEventListener("input", (ev) => {
   }, 150);
 });
 $("tab-tree").addEventListener("click", () => { state.view = "tree"; remember(); render(); });
-$("tab-headers").addEventListener("click", () => { state.view = "headers"; remember(); render(); });
+for (const v of ["headers", "graph", "modules", "status"]) {
+  $("tab-" + v).addEventListener("click", () => { state.view = v; remember(); render(); });
+}
+const graphInput = (id, set) => $(id).addEventListener("change", (ev) => { set(ev.target); render(); });
+graphInput("g-dir", (t) => { state.gdir = t.value; });
+graphInput("g-depth", (t) => { state.gdepth = Math.max(0, Number(t.value) || 0); });
+graphInput("g-unres", (t) => { state.gunres = t.checked; });
+graphInput("g-layout", (t) => { state.glayout = t.value; remember(); });
+graphInput("g-stage", (t) => {
+  if (t.value) state.gkinds = new Set(t.value.split(","));
+  syncControls();
+});
+document.querySelectorAll("#g-kinds input").forEach((box) => box.addEventListener("change", () => {
+  if (box.checked) state.gkinds.add(box.value); else state.gkinds.delete(box.value);
+  $("g-stage").value = "";
+  render();
+}));
+$("zin").addEventListener("click", () => zoom(1.25));
+$("zout").addEventListener("click", () => zoom(0.8));
+$("zfit").addEventListener("click", fit);
+$("xjson").addEventListener("click", exportJson);
+$("xsvg").addEventListener("click", exportSvg);
+$("xpng").addEventListener("click", exportPng);
+$("prev").addEventListener("click", () => stepHit(-1));
+$("next").addEventListener("click", () => stepHit(1));
+const VIEWS_KEY = "psect-deps-views:" + D.name;
+function savedViews() {
+  try { return JSON.parse(localStorage.getItem(VIEWS_KEY) || "{}"); } catch (e) { return {}; }
+}
+function listViews() {
+  const box = $("views");
+  box.replaceChildren(el("option", "", "-"));
+  box.firstChild.value = "";
+  for (const name of Object.keys(savedViews()).sort()) { const o = el("option", "", name); o.value = name; box.append(o); }
+}
+$("save").addEventListener("click", () => {
+  const name = window.prompt("Name of this view");
+  if (!name) return;
+  const views = savedViews();
+  views[name] = location.hash;
+  try { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); } catch (e) { /* blocked */ }
+  listViews();
+});
+$("views").addEventListener("change", (ev) => {
+  const hash = savedViews()[ev.target.value];
+  if (hash !== undefined) { location.hash = hash; readHash(); render(); }
+});
+listViews();
+syncControls();
+// Up and Down walk the rows on screen, Right opens, Left closes, Enter picks.
+$("left").addEventListener("keydown", (ev) => {
+  if (state.view !== "tree" || !ev.target.closest) return;
+  const rows = [...document.querySelectorAll("#left .row")].filter((r) => r.offsetParent);
+  const now = ev.target.closest(".row");
+  const i = rows.indexOf(now);
+  const toggle = (open) => {
+    const li = now && now.parentElement;
+    if (li && li.classList.contains("closed") === open) now.querySelector(".tw").click();
+  };
+  if (ev.key === "ArrowDown") rows[Math.min(i + 1, rows.length - 1)].focus();
+  else if (ev.key === "ArrowUp") rows[Math.max(i - 1, 0)].focus();
+  else if (ev.key === "ArrowRight") toggle(true);
+  else if (ev.key === "ArrowLeft") toggle(false);
+  else if (ev.key === "Enter" && now) now.click();
+  else return;
+  ev.preventDefault();
+});
 $("expand").addEventListener("click", () => {
   state.opened.clear(); state.closed.clear(); state.fold = "all"; render();
 });
