@@ -83,6 +83,27 @@ def test_a_link_is_refused_not_followed(project, capsys, tmp_path_factory):
     assert out["refused"][0]["file"].endswith("link.yaml") and out["masked_names"] == 0
 
 
+def test_a_folder_under_the_user_knowledge_can_be_chosen(project, capsys):
+    folder = user_folder() / "knowledge" / "team"
+    folder.mkdir(parents=True)
+    (folder / "t.yaml").write_bytes(b"version: 1\n")
+    p = project({}, config="knowledge:\n  paths: [user-knowledge/printsect/team]\n")
+    assert answer(capsys, "--root", str(p.root))["loaded"][0]["file"] == "user:t.yaml"
+
+
+@pytest.mark.parametrize("path", ["user-knowledge", "user-knowledge/other", "user-knowledge/../x",
+                                  "user-knowledge/printsect/..", "user-knowledge/printsect/../..",
+                                  "user-knowledge/printsect/a/../../..",
+                                  "user-knowledge/printsect/C:/x"])
+def test_a_project_cannot_reach_above_the_user_knowledge(project, capsys, path):
+    above = user_folder() / "private.yaml"
+    above.parent.mkdir(parents=True, exist_ok=True)
+    above.write_bytes(b"mask: [secret]\n")
+    p = project({}, config=f"knowledge:\n  paths: ['{path}']\n")
+    assert main(["--root", str(p.root)]) == 2
+    assert "knowledge.paths" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("path", ["/etc", "C:/x", "../outside", "a/../../b", r"\\server\share"])
 def test_a_folder_outside_the_project_stops(project, capsys, path):
     p = project({}, config="knowledge:\n  paths: ['" + path.replace("\\", "\\\\") + "']\n")

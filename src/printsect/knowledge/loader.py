@@ -124,8 +124,13 @@ def _folders(project: Project) -> list[tuple[str, Path]]:
     for entry in settings.get("paths") or DEFAULT_PATHS:
         text = str(entry).replace("\\", "/")
         if text == USER_PREFIX or text.startswith(USER_PREFIX + "/"):
-            found.append(("user:", user_folder() / "knowledge" / posixpath.relpath(
-                text, USER_PREFIX + "/printsect")))
+            # The settings can come with a project: they may pick a folder under the
+            # user's knowledge, and nothing above it.
+            parts = text.split("/")
+            if parts[:2] != [USER_PREFIX, "printsect"] or ".." in parts or ":" in text:
+                raise ConfigError(f"knowledge.paths: {entry!r} is not {USER_PREFIX}/printsect "
+                                  "or a folder under it")
+            found.append(("user:", user_folder().joinpath("knowledge", *parts[2:])))
             continue
         clean = posixpath.normpath(text)
         if ":" in text or text.startswith("/") or clean == ".." or clean.startswith("../"):
