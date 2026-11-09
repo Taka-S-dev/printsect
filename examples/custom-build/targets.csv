@@ -1,0 +1,4 @@
+target,kind,sources,uses
+alpha,archive,modules/alpha/alpha.c,
+beta,archive,modules/beta/beta.c;modules/beta/table.c,
+app,program,app/main.c,alpha;beta

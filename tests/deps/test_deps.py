@@ -408,6 +408,45 @@ def test_a_scanned_build_says_where_each_part_came_from(scanned):
     assert g.status_of("obj/rx.o") == "build" and g.status_of("src/inc/net.h") == "inferred"
 
 
+NINJA = """\
+/usr/bin/cc -Iinc -c {root}/src/a.c -o CMakeFiles/app.dir/src/a.c.o
+/usr/bin/cc -Iinc -c {root}/src/b.c -o CMakeFiles/lib.dir/src/b.c.o
+: && /usr/bin/cmake -E rm -f liblib.a && /usr/bin/ar qc liblib.a CMakeFiles/lib.dir/src/b.c.o \
+&& /usr/bin/ranlib liblib.a && :
+: && /usr/bin/cc CMakeFiles/app.dir/src/a.c.o -o app liblib.a && :
+"""
+
+
+def test_what_ninja_prints_for_a_cmake_build_is_read(project):
+    p = project({"src/a.c": b"int a;\n", "src/b.c": b"int b;\n", "inc/x.h": b""},
+                config="deps:\n  command: ninja -t commands\n")
+    g = make_scanner(p.settings["deps"]).scan(p, log=NINJA.format(root=p.root.as_posix()))
+    assert g.final_outs() == ["app"]
+    assert g.archives["liblib.a"]["objects"] == ["CMakeFiles/lib.dir/src/b.c.o"]
+    assert {r["root"] for r in g.which("src/b.c")} == {"app"}
+
+
+@pytest.mark.skipif(shutil.which("python") is None, reason="needs python")
+def test_the_custom_build_example_converts_and_reads(tmp_path, capsys):
+    from pathlib import Path
+
+    src = Path(__file__).parents[2] / "examples" / "custom-build"
+    root = tmp_path / "custom-build"
+    shutil.copytree(src, root, ignore=shutil.ignore_patterns(".printsect"))
+    graph = tmp_path / "build.json"
+    done = subprocess.run(["python", "to_graph.py", str(graph)], cwd=root,
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    (root / ".printsect").mkdir()
+    (root / "printsect.yaml").touch()
+    assert main(["deps", "--from-graph", str(graph), "--root", str(root)]) == 0
+    capsys.readouterr()
+    assert main(["deps", "impact", "modules/beta/table.def", "--json", "--root", str(root)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["made"] == ["modules/beta/table.c"]
+    assert out["outs"] == ["build/app.out"] and out["deployed"] == ["target:/opt/app.out"]
+
+
 def test_doctor_keeps_a_graph_file_and_says_when_it_is_stale(project, tmp_path, monkeypatch):
     def ran(*args, **kwargs):
         raise AssertionError("a command ran")

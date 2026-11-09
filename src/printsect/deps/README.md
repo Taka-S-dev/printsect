@@ -88,8 +88,9 @@ there and read the file: `make -n -B -w > make.log`, then `psect-deps --from-log
 ## A copy to hand on
 
 `psect-deps html --public` masks the names you list, turns absolute paths into `(outside)/name`,
-and leaves out commands, probe notes and reasons. `--hide-sources` also replaces every source,
-header and object name, and symbols. Masking only knows what it is told, so the page is then
+replaces deploy targets with `target-N`, and leaves out commands, probe notes and reasons.
+`--hide-sources` also replaces every source, header and object name, the map's modules, and
+drops symbols and include folders; archives and outputs keep their masked names. Masking only knows what it is told, so the page is then
 checked for absolute paths, anything like a password or key, the names to mask and this
 project's folder; if any remains, nothing is written and the error says which kinds and how
 many. It says what it masked, here and on the page.
@@ -137,6 +138,10 @@ Every path is relative to the project and inside it, and every part named must b
 it, a header's outputs are not known. `inputs` are the files the converter read: when one
 changes, the commands say so, and `psect build` stops until the file is written again.
 Anything else in the file stops with an error naming it.
+
+A build that Ninja runs, CMake's included, needs only a setting: `deps: {command: ninja -t commands}`
+prints every command, which is read the same way. See `examples/custom-build` for a whole
+converter.
 
 The reader is a plugin of the role `deps`. A package can add one through the entry
 point group `printsect.deps`; it needs `__init__(settings)` and
