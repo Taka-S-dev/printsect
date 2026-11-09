@@ -4,7 +4,7 @@
 
 `psect-knowledge` は、自分のビルドについて手元に置いたファイルを読みます：どのフォルダがどんなコードか、層の重なり方、外に出してはいけない名前、
 コードを読む人へのメモ。ツール本体はこれらを持たないので、製品の事情が公開リポジトリに入りません。単独で動きます。printsect の中では `psect knowledge` で、
-`psect map` と `psect deps html --public` が読み取った内容を使います。
+`psect map`、`psect map html --public`、`psect deps html --public` が読み取った内容を使います。
 
 これらのファイルを読んでも、何も実行せず、何も取りに行かず、リンクもたどりません。
 
@@ -21,7 +21,7 @@
 
 | 場所 | 用途 |
 |---|---|
-| `.printsect/knowledge/` | このプロジェクトだけ。このフォルダは git の対象外です |
+| `.printsect/knowledge/` | このプロジェクトだけ。`.printsect/` は printsect のコマンドが一度書き込むと git の対象外になります。それまでは警告が出ます |
 | ユーザーフォルダの `knowledge/` | 自分や組織で、プロジェクトをまたいで |
 
 読むのは設定に書いたフォルダだけです：
@@ -51,7 +51,7 @@ scope:                  # すべて省略可。一致しないファイルは対
   applies_to: [analysis, html, tools]
 classes: {comm: ["net/*"], ui: ["ui/*"]}      # psect map 用
 layers: ["app/*", "service/*", "driver/*"]    # psect map issues 用
-mask: [acme, modelx]                          # psect deps html --public 用
+mask: [acme, modelx]                          # deps と map の --public ページ用
 notes: |
   util/ のリングは割り込みハンドラと共有している。
 ```

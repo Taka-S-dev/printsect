@@ -19,7 +19,7 @@
 #   read: [mytool, screen, --json, --lines, "500"]
 #   send: [mytool, send, "{text}", --json]
 
-# 他に使っていなければ、ここでポートを開く場合（pip install 'printsect[serial]'）：
+# 他に使っていなければ、ここでポートを開く場合（printsect の serial 付きインストールが必要）：
 # console:
 #   type: serial
 #   port: COM3

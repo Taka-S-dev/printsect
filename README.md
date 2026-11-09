@@ -23,7 +23,8 @@ console for the new build, and so on. Each tool
 also runs as `python -m printsect.<tool>`.
 
 ```sh
-uv tool install printsect      # or: pipx install printsect
+uv tool install git+https://github.com/Taka-S-dev/printsect    # or: pipx install git+https://github.com/Taka-S-dev/printsect
+# with the serial console: uv tool install "printsect[serial] @ git+https://github.com/Taka-S-dev/printsect"
 
 psect-deps tree                # the build of the project in this folder
 psect-deps which src/inc/net.h # what a change to this header rebuilds

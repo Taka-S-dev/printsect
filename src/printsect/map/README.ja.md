@@ -50,7 +50,7 @@ left out: same name in several files 80 symbol(s) (391 use(s)); static elsewhere
 
 `psect-map html --public` は人に渡すコピーを `.printsect/map.public.html` に作ります。`public.mask` の名前、`psect map` では知識ファイルの名前、このフォルダの名前を、
 ページの内容を計算する前に取り除くので、計算結果に元の名前は残りません。`--hide-sources` か `public.hide_sources` でファイル名とシンボル名も置き換えます。
-スナップショットは含めません。書き出す直前に内容を確認し、名前、絶対パス、パスワードらしきものが残っていれば何も書きません。
+スナップショットは含めません。書き出す直前に内容を確認し、名前、ドライブや `/home`、`/Users`、`/mnt`、`/opt`、`/srv` で始まるパス、パスワードらしきものが残っていれば何も書きません。
 
 ## 数えるもの
 

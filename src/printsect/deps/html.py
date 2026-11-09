@@ -3,7 +3,8 @@
 Everything is inside the file (no network, no scripts from elsewhere), so it opens
 offline and can be handed to someone as it is. The data goes in as JSON inside a
 <script type="application/json"> block and is only ever put on the page as text.
-The page holds paths relative to the project, never the folder it sits in.
+The page holds paths relative to the project, never the folder it sits in; only a part
+outside the project keeps its full path.
 """
 
 from __future__ import annotations

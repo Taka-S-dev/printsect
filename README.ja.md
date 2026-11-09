@@ -21,7 +21,8 @@ printsect は小さなツールの集まりです。一度入れれば、各ツ�
 起動したことをコンソールで確かめる、などです。各ツールは `python -m printsect.<tool>` でも動きます。
 
 ```sh
-uv tool install printsect      # または: pipx install printsect
+uv tool install git+https://github.com/Taka-S-dev/printsect    # または: pipx install git+https://github.com/Taka-S-dev/printsect
+# シリアルコンソールも使うなら: uv tool install "printsect[serial] @ git+https://github.com/Taka-S-dev/printsect"
 
 psect-deps tree                # このフォルダのプロジェクトのビルド
 psect-deps which src/inc/net.h # このヘッダを変えると何が作り直されるか

@@ -28,7 +28,7 @@ Pick one with `console: {type: …}`.
 
 | Type | Use when | Settings |
 |---|---|---|
-| `serial` | Nothing else holds the port. Needs `pip install 'printsect[serial]'` | `port` (`COM3`, `/dev/ttyUSB0`), `baudrate` (115200), `encoding`, `eol` (`"\r"`), `prompt` (a regex; else an answer ends after `quiet` seconds of silence, 0.5), `timeout` |
+| `serial` | Nothing else holds the port. Needs printsect installed with its `serial` extra (the first lines of the top README) | `port` (`COM3`, `/dev/ttyUSB0`), `baudrate` (115200), `encoding`, `eol` (`"\r"`), `prompt` (a regex; else an answer ends after `quiet` seconds of silence, 0.5), `timeout` |
 | `tcp` | The program holding the port answers JSON over a local TCP connection, one line per request | `port`, `host` (this PC only), `read_request`, `send_request`, `timeout`, and the keys below |
 | `command` | The program has a command line that prints JSON | `read`, `send` (strings run by the shell, or lists of words), `timeout`, and the keys below |
 | `file` | The program writes a log file (most terminal programs can) | `path`, `encoding`. Read only |

@@ -93,8 +93,8 @@ there and read the file: `make -n -B -w > make.log`, then `psect-deps --from-log
 replaces deploy targets with `target-N`, and leaves out commands, probe notes and reasons.
 `--hide-sources` also replaces every source, header and object name, the map's modules, and
 drops symbols and include folders; archives and outputs keep their masked names. Masking only knows what it is told, so the page is then
-checked for absolute paths, anything like a password or key, the names to mask and this
-project's folder; if any remains, or a knowledge file that may hold names was refused, nothing
+checked for paths on a drive or under `/home`, `/Users`, `/mnt`, `/opt` or `/srv`, anything like a
+password or key, the names to mask and this project's folder; if any remains, or a knowledge file that may hold names was refused, nothing
 is written and the error says which kinds and how many. It says what it masked, here and on the page.
 
 ```yaml
@@ -109,7 +109,7 @@ public:                    # keep real names in printsect.local.yaml
 |---|---|
 | `.printsect/deps.json` | The graph: `outs`, `archives`, `objects` (each with `source`, `headers`) |
 | `.printsect/DEPS.md` | The tree and each header's outputs, to read in an editor |
-| `.printsect/deps.html` | The page from `psect-deps html`. Holds paths relative to the project only and fetches nothing, but names your files, commands and notes |
+| `.printsect/deps.html` | The page from `psect-deps html`. Holds paths relative to the project, except for parts outside it, which keep their full path. Fetches nothing. Names your files, commands and notes |
 | `.printsect/deps.public.html` | The page from `psect-deps html --public`, made to hand on |
 
 ## Other build systems

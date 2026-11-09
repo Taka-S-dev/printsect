@@ -59,8 +59,8 @@ the page.
 `public.mask`, in knowledge files under `psect map`, and this folder's name are taken out before
 the page is worked out, so what it derives cannot hold them; `--hide-sources` or
 `public.hide_sources` replaces file and symbol names too. Snapshots are left out. The text about
-to be written is then checked, and if a name, an absolute path or something like a password
-remains, nothing is written.
+to be written is then checked, and if a name, a path on a drive or under `/home`, `/Users`, `/mnt`,
+`/opt` or `/srv`, or something like a password remains, nothing is written.
 
 ## What is counted
 

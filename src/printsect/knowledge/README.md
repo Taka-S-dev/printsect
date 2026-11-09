@@ -5,8 +5,8 @@ English | [日本語](README.ja.md)
 `psect-knowledge` reads files you keep about your own build: which folders are which kind of
 code, how the layers stack, which names must not leave, and notes for whoever reads the code.
 The tool holds none of that, so a product's details never go into a public repository. It
-runs on its own; inside printsect it is `psect knowledge`, and `psect map` and
-`psect deps html --public` use what it found.
+runs on its own; inside printsect it is `psect knowledge`, and `psect map`,
+`psect map html --public` and `psect deps html --public` use what it found.
 
 Reading one of these files never runs anything, fetches nothing and follows no link.
 
@@ -23,7 +23,7 @@ Both take `--json` and `--root DIR`.
 
 | Place | For |
 |---|---|
-| `.printsect/knowledge/` | This project only. The folder ignores itself for git |
+| `.printsect/knowledge/` | This project only. `.printsect/` ignores itself for git once a printsect command has written there; until then a warning says so |
 | Your user folder, `knowledge/` | You or your organisation, across projects |
 
 Only the folders in the settings are read:
@@ -56,7 +56,7 @@ scope:                  # all optional: a file that does not match is left out
   applies_to: [analysis, html, tools]
 classes: {comm: ["net/*"], ui: ["ui/*"]}      # for psect map
 layers: ["app/*", "service/*", "driver/*"]    # for psect map issues
-mask: [acme, modelx]                          # for psect deps html --public
+mask: [acme, modelx]                          # for --public pages of deps and map
 notes: |
   The ring in util/ is shared with the interrupt handler.
 ```

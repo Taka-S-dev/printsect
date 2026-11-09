@@ -27,7 +27,7 @@
 
 | 種類 | 使うとき | 設定 |
 |---|---|---|
-| `serial` | ほかにポートを開いているものがない。`pip install 'printsect[serial]'` が必要 | `port`（`COM3`、`/dev/ttyUSB0`）、`baudrate`（115200）、`encoding`、`eol`（`"\r"`）、`prompt`（正規表現。なければ `quiet` 秒の無出力で応答の終わり、0.5）、`timeout` |
+| `serial` | ほかにポートを開いているものがない。printsect を `serial` 付きでインストールする必要あり（トップの README の冒頭） | `port`（`COM3`、`/dev/ttyUSB0`）、`baudrate`（115200）、`encoding`、`eol`（`"\r"`）、`prompt`（正規表現。なければ `quiet` 秒の無出力で応答の終わり、0.5）、`timeout` |
 | `tcp` | ポートを開いているプログラムが、この PC の TCP で、1 リクエストに 1 行の JSON で答える | `port`、`host`（この PC のみ）、`read_request`、`send_request`、`timeout`、下のキー |
 | `command` | そのプログラムに、JSON を出力するコマンドラインがある | `read`、`send`（シェルで実行する文字列、または単語の一覧）、`timeout`、下のキー |
 | `file` | そのプログラムがログファイルを書く（たいていの端末プログラムはできる） | `path`、`encoding`。読むだけ |

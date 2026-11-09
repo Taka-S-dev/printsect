@@ -1,6 +1,6 @@
 """Consoles that ship with printsect. Anything tool-specific belongs in settings or a plugin.
 
-    serial   open the port here (pyserial: pip install printsect[serial])
+    serial   open the port here (needs pyserial: the serial extra)
     tcp      ask a local program that holds the port, one JSON line per request
     command  ask a program through its command line, which prints JSON
     file     follow a log file that a terminal program writes
@@ -222,8 +222,8 @@ class SerialConsole:
         try:
             import serial  # pyserial
         except ImportError as exc:
-            raise ConfigError("the serial console needs pyserial: pip install "
-                              "'printsect[serial]'") from exc
+            raise ConfigError("the serial console needs pyserial: install printsect "
+                              "with its serial extra") from exc
         self.encoding = str(settings.get("encoding", "utf-8"))
         self.eol = str(settings.get("eol", "\r"))
         self.prompt = re.compile(settings["prompt"]) if settings.get("prompt") else None
