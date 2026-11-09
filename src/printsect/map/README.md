@@ -32,8 +32,9 @@ shortest way round each and the symbols on it. It says `cycles: none` when there
 |---|---|
 | `psect-map` | The whole picture: modules with most users first, and who uses whom |
 | `psect-map focus MODULE` | One module, archive or any folder: who uses it and through which symbols, what it uses, what is inside, and each file's place (`entry` = used from outside) |
+| `psect-map who NAME` | Who uses one function, variable or file: where it is defined, each using file with its lines, and why when the name has several definitions |
 
-Both take `--top N` (rows per list, 30 by default; what is cut is counted), `--by-dir`
+All take `--top N` (rows per list, 30 by default; what is cut is counted), `--by-dir`
 (group by folder even when archives are known), `--json` and `--root DIR`. Each symbol
 comes with the file and line that define it.
 
@@ -109,5 +110,5 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | `cli.py` | The commands; `configure()` lets `psect` mount them and add archives and probe marks |
 | `scanner.py` | One file's definitions and the names it uses |
 | `index.py` | The builtin indexer: walking the project, and the saved index |
-| `model.py` | From the index to modules, roles, and the two answers |
+| `model.py` | From the index to modules, roles, and the answers |
 | `cycles.py` | Finding the loops among modules |

@@ -21,7 +21,7 @@ from ..core.config import Project
 from ..core.errors import ConfigError
 from ..core.fsutil import ensure_state_dir, is_link, write_atomic
 from ..core.plugins import register
-from .scanner import scan
+from .scanner import scan, use_lines
 
 INDEX_FILE = "map.json"
 INDEX_VERSION = 3
@@ -136,6 +136,16 @@ class ScanIndexer:
             return dict(files)
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return {}
+
+    def lines_of(self, project: Project, file: str, name: str) -> list[int]:
+        """The lines of `file`, one this index found, that use `name`. Read when asked,
+        not kept: the saved index stays small and only the files on screen are opened."""
+        try:
+            with open(project.root / file, "rb") as handle:
+                data = handle.read(MAX_FILE_BYTES + 1)
+        except OSError:
+            return []
+        return use_lines(self._text(data), name)
 
     def index(self, project: Project, log: Callable[[str], None]) -> Index:
         path = project.state_file(INDEX_FILE)

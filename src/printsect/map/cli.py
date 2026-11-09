@@ -2,6 +2,7 @@
 
     psect-map                  the whole picture, most used modules first
     psect-map focus MODULE     one module: who uses it, what it uses, its files
+    psect-map who NAME         who uses a function, variable or file
 
 It reads the source and runs nothing, so it works before anything is set up. `psect map`
 is the same tool inside printsect, which groups by the build's archives when the build
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import re
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -26,6 +28,15 @@ from .model import Map, build
 Modules = Callable[[Project], "dict[str, str] | None"]
 Marks = Callable[[Project], dict[str, list[dict[str, Any]]]]
 DEFAULT_TOP = 30
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_STATUS = {
+    "one": "defined once",
+    "same_name": "defined in several files; which one a file means cannot be told, "
+                 "so these uses are not on the map",
+    "static": "static, so only its own file can use it",
+    "undefined": "no definition in the source read (it may be a macro, in a header or "
+                 "in a library)",
+}
 
 
 def no_modules(project: Project) -> dict[str, str] | None:
@@ -40,10 +51,13 @@ def _map(args: argparse.Namespace) -> Map:
     from . import make_indexer
 
     proj = project(args)
-    index = make_indexer(proj.settings.get("map")).index(
-        proj, lambda text: print(text, file=sys.stderr))
+    indexer = make_indexer(proj.settings.get("map"))
+    index = indexer.index(proj, lambda text: print(text, file=sys.stderr))
     modules = None if args.by_dir else args.map_modules(proj)
-    return Map(build(index, modules), modules, args.map_marks(proj))
+    # An indexer of another kind may have no way to give lines; the answer then has none.
+    reader = getattr(indexer, "lines_of", None)
+    lines_in = (lambda file, name: reader(proj, file, name)) if reader else None
+    return Map(build(index, modules), modules, args.map_marks(proj), lines_in)
 
 
 def _more(section: dict[str, Any]) -> str:
@@ -146,6 +160,63 @@ def _focus_text(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _used_at(row: dict[str, Any]) -> str:
+    more = f", +{row['more_lines']}" if row["more_lines"] else ""
+    at = f":{', '.join(str(n) for n in row['lines'])}{more}" if row["lines"] else ""
+    return f"{row['file']}{at}"
+
+
+def _who_text(data: dict[str, Any]) -> str:
+    users = data["users"]
+    if data["kind"] == "file":
+        lines = [f"{data['name']}  in {data['module']}, defines {data['defines']}, "
+                 f"used by {users['total']} file(s)"]
+        lines += [f"  {r['file']}  {r['module']}  {r['count']}  {_symbols(r)}"
+                  for r in users["shown"]]
+    else:
+        lines = [f"{data['name']}: {_STATUS[data['status']]}"]
+        if data["defined"]["total"]:
+            lines.append("defined:")
+            lines += [f"  {d['file']}:{d['line']}  {d['kind']}{'  static' if d['static'] else ''}"
+                      for d in data["defined"]["shown"]]
+            if more := _more(data["defined"]):
+                lines.append(more)
+        lines.append(f"used by ({users['total']}):")
+        lines += [f"  {_used_at(r)}  {r['module']}{'  its own file' if r['own_file'] else ''}"
+                  for r in users["shown"]]
+        if data["cannot_reach"]:
+            lines.append(f"{data['cannot_reach']} other file(s) use this name, "
+                         "and cannot reach a static")
+    if more := _more(users):
+        lines.append(more)
+    return "\n".join(lines)
+
+
+def _who(code_map: Map, name: str, top: int) -> dict[str, Any]:
+    """A C name can hold no dot or slash and a source file's path does, so one look tells."""
+    if _IDENTIFIER.fullmatch(name):
+        found = code_map.symbol(name, top)
+        if found is None:
+            near = difflib.get_close_matches(name, code_map.symbol_names(name[0]), n=3)
+            hint = f"; did you mean {', '.join(near)}?" if near else ""
+            raise PsectError(f"nothing here defines or uses {name!r}{hint}")
+        return found
+    files = code_map.files_named(name)
+    if len(files) > 1:
+        raise PsectError(f"{name!r} could be {', '.join(files[:5])}; give more of the path")
+    if not files:
+        near = difflib.get_close_matches(name, code_map.t.files, n=3, cutoff=0.5)
+        hint = f"; did you mean {', '.join(near)}?" if near else ""
+        raise PsectError(f"no source file named {name!r}{hint}")
+    return code_map.file_users(files[0], top)
+
+
+def cmd_who(args: argparse.Namespace) -> int:
+    data = _who(_map(args), args.name, args.top)
+    out(args, data, _who_text(data))
+    return 0
+
+
 def cmd_overview(args: argparse.Namespace) -> int:
     data = _map(args).overview(args.top)
     out(args, data, _overview_text(data))
@@ -196,6 +267,9 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
                        help="one module: who uses it, what it uses, its files")
     p.add_argument("module", help="a module or archive from the map, or any folder")
     p.set_defaults(func=cmd_focus)
+    p = sub.add_parser("who", parents=[below], help="who uses a function, variable or file")
+    p.add_argument("name", help="a function or variable, or a source file (a.c, net/a.c)")
+    p.set_defaults(func=cmd_who)
 
 
 def build_parser() -> argparse.ArgumentParser:

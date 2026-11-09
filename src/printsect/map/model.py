@@ -13,17 +13,21 @@ out is always part of the answer: not on the map does not mean not there.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 from .cycles import loops, round_trip
-from .index import Index
+from .index import FileEntry, Index
 
 ROOT_FOLDER = "./"
 SPLIT_SHARE = 0.15
 MAX_GROUPS = 40
 SYMBOLS_SHOWN = 5
+LINES_SHOWN = 10
+KINDS = {"f": "function", "v": "variable"}
+
+LinesIn = Callable[[str, str], list[int]]  # (file, name) -> the lines using it
 
 
 @dataclass
@@ -33,6 +37,7 @@ class Tables:
     files: list[str] = field(default_factory=list)
     omitted: dict[str, int] = field(default_factory=dict)
     inside_if: int = 0  # definitions counted though an #if may leave them out of a build
+    entries: dict[str, FileEntry] = field(default_factory=dict)
 
 
 def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
@@ -42,7 +47,7 @@ def build(index: Index, in_build: Iterable[str] | None = None) -> Tables:
     files = {f: e for f, e in index.files.items() if scope is None or f in scope}
     definers: dict[str, list[str]] = defaultdict(list)
     statics: set[str] = set()
-    tables = Tables(files=sorted(files))
+    tables = Tables(files=sorted(files), entries=files)
     for name, entry in files.items():
         for symbol, _kind, static, line in entry.defs:
             tables.lines.setdefault((name, symbol), line)
@@ -149,11 +154,13 @@ class Map:
     """The answers: the whole picture, and one module seen from inside."""
 
     def __init__(self, tables: Tables, modules: dict[str, str] | None = None,
-                 marks: dict[str, list[dict[str, Any]]] | None = None) -> None:
+                 marks: dict[str, list[dict[str, Any]]] | None = None,
+                 lines_in: LinesIn | None = None) -> None:
         self.t = tables
         self.grouped_by = "archive" if modules else "directory"
         self.owner = modules if modules else directory_groups(tables)
         self.marks = marks or {}
+        self.lines_in = lines_in
 
     def _module_of(self, file: str) -> str:
         return self.owner.get(file, "(not in an archive)")
@@ -253,6 +260,74 @@ class Map:
         for (file, symbol), _n in ordered[:SYMBOLS_SHOWN]:
             shown.append({"name": symbol, "file": file, "line": self.t.lines.get((file, symbol))})
         return {"symbols": shown, "more_symbols": max(0, len(ordered) - SYMBOLS_SHOWN)}
+
+    def symbol_names(self, first_letter: str) -> list[str]:
+        return sorted({d[0] for e in self.t.entries.values() for d in e.defs
+                       if d[0][:1].lower() == first_letter.lower()})
+
+    def symbol(self, name: str, top: int) -> dict[str, Any] | None:
+        """Where a function or variable is defined and who uses it; None if nothing here
+        mentions it. A name with several definitions stays unresolved: its users are
+        listed as using the name, and the status says which of them cannot be told."""
+        defined: list[dict[str, Any]] = []
+        users = []
+        for file in self.t.files:
+            entry = self.t.entries[file]
+            defined += [{"file": file, "line": line, "kind": KINDS.get(kind, kind),
+                         "static": static}
+                        for symbol, kind, static, line in entry.defs if symbol == name]
+            if name in entry.refs:
+                users.append(file)
+        if not defined and not users:
+            return None
+        public = [d for d in defined if not d["static"]]
+        if defined and not public:
+            status = "static"
+        elif defined:
+            status = "one" if len(public) == 1 else "same_name"
+        else:
+            status = "undefined"
+        at_definition = {(d["file"], d["line"]) for d in defined}
+
+        def lines_in(file: str) -> list[int]:
+            found = self.lines_in(file, name) if self.lines_in else []
+            return [n for n in found if (file, n) not in at_definition]
+
+        # A file defining the name is a user only if it also uses it: looked at first, so
+        # the count is right. There are few of those; the other users are read when shown.
+        lines = {f: found for f in {d["file"] for d in defined} if (found := lines_in(f))}
+        reaching = [] if status == "static" else users
+        rows = [{"file": f, "module": self._module_of(f), "own_file": f in lines}
+                for f in {*reaching, *lines}]
+        rows.sort(key=lambda r: (r["own_file"], r["module"], r["file"]))
+        listed = _capped(rows, top)
+        for row in listed["shown"]:
+            found = lines[row["file"]] if row["own_file"] else lines_in(row["file"])
+            row.update(lines=found[:LINES_SHOWN], more_lines=max(0, len(found) - LINES_SHOWN))
+        return {"kind": "symbol", "name": name, "status": status,
+                "defined": _capped(defined, top), "users": listed,
+                "cannot_reach": len(users) if status == "static" else 0,
+                "grouped_by": self.grouped_by}
+
+    def files_named(self, name: str) -> list[str]:
+        """The files a typed path means: the exact one, or those ending with it."""
+        text = name.replace("\\", "/").removeprefix("./")
+        if text in self.t.entries:
+            return [text]
+        return [f for f in self.t.files if f.endswith("/" + text)]
+
+    def file_users(self, file: str, top: int) -> dict[str, Any]:
+        """Who uses what one file defines, heaviest user first."""
+        came_in: dict[str, Counter[tuple[str, str]]] = defaultdict(Counter)
+        for (user, definer), symbols in self.t.edges.items():
+            if definer == file:
+                came_in[user].update((file, s) for s in symbols)
+        rows = [{"file": u, "module": self._module_of(u), "count": sum(c.values()),
+                 **self._symbols(c)} for u, c in came_in.items()]
+        rows.sort(key=lambda r: (-r["count"], r["file"]))
+        return {"kind": "file", "name": file, "module": self._module_of(file),
+                "defines": len(self.t.entries[file].defs), "users": _capped(rows, top),
+                "grouped_by": self.grouped_by}
 
     def focus(self, module: str, top: int) -> dict[str, Any]:
         inside_files = [f for f in self.t.files if self._inside(module, f)]

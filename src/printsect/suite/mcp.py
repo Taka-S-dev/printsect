@@ -185,6 +185,13 @@ TOOLS = [
                             "by_dir": _b("group by folder even when archives are known")},
          ("module",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
          positional=("module",)),
+    Tool("map_who", "Who uses one function, variable or file: where it is defined, each using "
+         "file with its lines, and why when the name has several definitions.",
+         ["map", "who"], {"name": _s("a function or variable, or a source file"),
+                          "top": _i("rows per list (default 30)"),
+                          "by_dir": _b("group by folder even when archives are known")},
+         ("name",), options={"top": "--top"}, switches={"by_dir": "--by-dir"},
+         positional=("name",)),
     Tool("deps_scan", "Read the build: once before the deps_ tools, and again after a Makefile "
          "or deps settings changed.",
          ["deps"]),

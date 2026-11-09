@@ -252,6 +252,30 @@ class _Walk:
 
 def scan(text: str) -> Scan:
     """Read one C file's text."""
+    return _read(text)[0]
+
+
+def use_lines(text: str, name: str) -> list[int]:
+    """Each line where `name` appears in what a scan reads as code: not in a comment, a
+    string or an `#if 0`, and so the same text the names of `scan` come from."""
+    _, s, cuts = _read(text)
+    pattern = re.compile(rf"\b{re.escape(name)}\b", _ASCII)
+    lines: list[int] = []
+    line = 1
+    counted = at = 0
+    for begin, end in [*cuts, (len(s), len(s))]:
+        if begin > at:
+            for match in pattern.finditer(s, at, begin):
+                line += s.count("\n", counted, match.start())
+                counted = match.start()
+                if not lines or lines[-1] != line:
+                    lines.append(line)
+        at = max(at, end)
+    return lines
+
+
+def _read(text: str) -> tuple[Scan, str, list[tuple[int, int]]]:
+    """The scan, the text it read and the (begin, end) parts of it that are not code."""
     if "\r" in text:
         text = text.replace("\r\n", "\n")
     s = _STRIP.sub(_blank, text)
@@ -342,4 +366,4 @@ def scan(text: str) -> Scan:
     walk.out.refs = sorted(set(_IDENT.findall(" ".join(pieces))) - KEYWORDS - own)
     walk.out.unbalanced = depth != 0
     walk.out.inside_if = len(walk.inside_if & own)
-    return walk.out
+    return walk.out, s, cuts

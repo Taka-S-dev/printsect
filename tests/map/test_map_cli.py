@@ -153,6 +153,102 @@ def test_the_shortest_way_round_is_taken():
     assert round_trip("a", uses, {"a", "b", "c", "d"}) == ["a", "c"]
 
 
+def test_who_gives_the_definition_and_each_user_with_lines(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "who", "ring_put", "--root", str(p.root))
+    assert out["status"] == "one"
+    assert out["defined"]["shown"] == [
+        {"file": "util/ring.c", "line": 1, "kind": "function", "static": False}]
+    rows = [(r["file"], r["module"], r["lines"]) for r in out["users"]["shown"]]
+    assert rows == [("net/rx.c", "net/", [2]), ("net/tx.c", "net/", [1])]
+    capsys.readouterr()
+    main(["who", "ring_put", "--root", str(p.root)])
+    text = capsys.readouterr().out
+    assert "util/ring.c:1  function" in text and "net/rx.c:2  net/" in text
+
+
+def test_who_lists_uses_inside_the_defining_file_after_the_others(project, capsys):
+    p = project({"a.c": b"int f(void) { return 0; }\nint g(void) { return f(); }\n",
+                 "b.c": b"int h(void) { return f(); }\n"})
+    _, out = data(capsys, "who", "f", "--root", str(p.root))
+    rows = [(r["file"], r["own_file"], r["lines"]) for r in out["users"]["shown"]]
+    assert rows == [("b.c", False, [1]), ("a.c", True, [2])]
+
+
+def test_who_skips_comments_strings_and_dead_code(project, capsys):
+    source = (b'// f here\nchar *s = "f";\n#if 0\nint x = f();\n#endif\n'
+              b"int use(void) { return f(); }\n")
+    p = project({"a.c": b"int f(void) { return 0; }\n", "b.c": source})
+    _, out = data(capsys, "who", "f", "--root", str(p.root))
+    assert out["users"]["shown"][0]["lines"] == [6]
+
+
+def test_who_says_why_a_name_with_two_definitions_is_not_settled(project, capsys):
+    p = project({"a/x.c": b"int f(void) { return 0; }\n", "b/x.c": b"int f(void) { return 1; }\n",
+                 "c/y.c": b"int g(void) { return f(); }\n"})
+    _, out = data(capsys, "who", "f", "--root", str(p.root))
+    assert out["status"] == "same_name" and out["defined"]["total"] == 2
+    assert [r["file"] for r in out["users"]["shown"]] == ["c/y.c"]
+    capsys.readouterr()
+    main(["who", "f", "--root", str(p.root)])
+    assert "cannot be told" in capsys.readouterr().out
+
+
+def test_who_a_static_is_used_only_in_its_own_file(project, capsys):
+    p = project({"a.c": b"static int f(void) { return 0; }\nint g(void) { return f(); }\n",
+                 "b.c": b"int h(void) { return f(); }\n"})
+    _, out = data(capsys, "who", "f", "--root", str(p.root))
+    assert out["status"] == "static" and out["cannot_reach"] == 1
+    assert [(r["file"], r["lines"]) for r in out["users"]["shown"]] == [("a.c", [2])]
+
+
+def test_who_a_name_with_no_definition_lists_its_users(project, capsys):
+    p = project({"a.c": b"int f(void) { return printf(0); }\n"})
+    _, out = data(capsys, "who", "printf", "--root", str(p.root))
+    assert out["status"] == "undefined" and out["users"]["total"] == 1
+
+
+def test_who_a_definition_not_used_in_its_file_is_not_a_user(project, capsys):
+    p = project({"a.c": b"int f(void) { return 0; }\n"})
+    _, out = data(capsys, "who", "f", "--root", str(p.root))
+    assert out["users"] == {"shown": [], "total": 0}
+
+
+def test_who_cuts_files_and_lines(project, capsys):
+    p = project({"a.c": b"int f(void) { return 0; }\n",
+                 "b.c": b"int g(void) {\n" + b"f();\n" * 12 + b"return 0; }\n",
+                 "c.c": b"int h(void) { return f(); }\n"})
+    _, out = data(capsys, "who", "f", "--top", "1", "--root", str(p.root))
+    row = out["users"]["shown"][0]
+    assert out["users"]["total"] == 2 and len(out["users"]["shown"]) == 1
+    assert len(row["lines"]) == 10 and row["more_lines"] == 2
+
+
+def test_who_a_file_lists_what_each_user_takes_from_it(project, capsys):
+    p = project(NET)
+    _, out = data(capsys, "who", "net/rx.c", "--root", str(p.root))
+    assert out["kind"] == "file" and out["module"] == "net/" and out["defines"] == 1
+    assert out["users"]["shown"][0]["file"] == "app/main.c"
+    assert out["users"]["shown"][0]["symbols"][0]["name"] == "rx"
+    _, by_name = data(capsys, "who", "ring.c", "--root", str(p.root))
+    assert by_name["name"] == "util/ring.c"
+
+
+def test_who_an_unclear_or_unknown_name_stops(project, capsys):
+    p = project({"a/x.c": b"int foo_one;\n", "b/x.c": b"int two;\n"})
+    assert main(["who", "x.c", "--root", str(p.root)]) == 1
+    assert "a/x.c, b/x.c" in capsys.readouterr().err
+    assert main(["who", "foo_on", "--root", str(p.root)]) == 1
+    assert "foo_one" in capsys.readouterr().err
+    assert main(["who", "nothing.c", "--root", str(p.root)]) == 1
+
+
+def test_who_works_with_an_index_that_gives_no_lines():
+    t = build(Index(files={"a.c": entry(("f", False)), "b.c": entry(refs=["f"])}))
+    out = Map(t).symbol("f", 10)
+    assert [(r["file"], r["lines"]) for r in out["users"]["shown"]] == [("b.c", [])]
+
+
 def test_an_unknown_module_names_the_nearest(project, capsys):
     p = project(NET)
     assert main(["focus", "nett", "--root", str(p.root)]) == 1
@@ -386,8 +482,11 @@ def test_psect_map_marks_probes(project, capsys, monkeypatch):
 
 def test_the_agent_can_use_it_without_approval(project):
     p = project(NET)
-    assert "map" in BY_NAME and "map_focus" in BY_NAME
-    assert not {"map", "map_focus"} & RUNS_SETTINGS
+    assert {"map", "map_focus", "map_who"} <= set(BY_NAME)
+    assert not {"map", "map_focus", "map_who"} & RUNS_SETTINGS
+    text, is_error = call(BY_NAME["map_who"], {"name": "ring_put"}, str(p.root))
+    assert not is_error, text
+    assert json.loads(text)["status"] == "one"
     text, is_error = call(BY_NAME["map_focus"], {"module": "net"}, str(p.root))
     assert not is_error, text
     assert json.loads(text)["module"] == "net/"
