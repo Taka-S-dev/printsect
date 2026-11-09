@@ -7,6 +7,8 @@ count here is how many (symbol, file) pairs were seen, not how much a thing matt
 from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
+from collections.abc import Callable
+from fnmatch import fnmatchcase
 from typing import Any
 
 from .model import NOT_SEEN, Map, _capped
@@ -144,10 +146,21 @@ def _between(code_map: Map) -> Counter[tuple[str, str]]:
     return found
 
 
-def issues(code_map: Map, layers: list[str], top: int) -> dict[str, Any]:
-    """Where the design looks strained. These are places to look, not verdicts."""
-    from fnmatch import fnmatchcase
+def layer_of(layers: list[str]) -> Callable[[str], int | None]:
+    """A file's layer, top first, by the patterns of map.layers."""
+    def layer(file: str) -> int | None:
+        for i, pattern in enumerate(layers):
+            if fnmatchcase(file, pattern):
+                return i
+        return None
 
+    return layer
+
+
+def issues(code_map: Map, layers: list[str], top: int,
+           rank: Callable[[str], int | None] | None = None) -> dict[str, Any]:
+    """Where the design looks strained. These are places to look, not verdicts. `rank`
+    says a file's layer when its name is no longer the one the patterns were written for."""
     between = _between(code_map)
     used_by: dict[str, set[str]] = defaultdict(set)
     uses: dict[str, set[str]] = defaultdict(set)
@@ -167,12 +180,7 @@ def issues(code_map: Map, layers: list[str], top: int) -> dict[str, Any]:
                                        for m, s in uses.items() if len(s) >= many]
     sprawling.sort(key=lambda r: (-r["uses"], r["module"]))
 
-    def layer(file: str) -> int | None:
-        for i, pattern in enumerate(layers):
-            if fnmatchcase(file, pattern):
-                return i
-        return None
-
+    layer = rank or layer_of(layers)
     backwards: list[dict[str, Any]] = []
     if layers:
         for (user, definer), symbols in sorted(code_map.t.edges.items()):

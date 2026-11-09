@@ -41,6 +41,7 @@
 | `cli.py` | `--json` / `--root`、JSON の応答、終了コード（0 ok、1 失敗、2 設定、3 人の作業待ち） |
 | `config.py` | プロジェクトのルートを探す。`printsect.yaml` と `printsect.local.yaml`。既定値。設定の確認 |
 | `init_config.yaml`, `init_local.yaml` | `psect init` が書くもの：全部分をコメントにし、架空の例を付けたもの（`.ja.yaml` が日本語版） |
+| `masking.py` | 人に渡すコピーから名前を除く処理と、書き出す前の確認 |
 | `plugins.py` | 役割と、その実装：標準のもの、またはエントリポイント `printsect.<role>` から |
 | `errors.py` | `PsectError`、`ConfigError` |
 | `fsutil.py` | 途中で壊れない書き込み。git から自動で除外される `.printsect/` フォルダ |

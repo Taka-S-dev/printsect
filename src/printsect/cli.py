@@ -80,12 +80,6 @@ def _outputs_of(proj: Project) -> dict[str, list[str]] | None:
     return owner or None
 
 
-def _output_modules(proj: Project) -> dict[str, str] | None:
-    """Each source file -> its final outputs as one name, for grouping by them."""
-    owner = _outputs_of(proj)
-    return {s: "+".join(outs) for s, outs in owner.items()} if owner else None
-
-
 def _map_builds(proj: Project, files: list[str]) -> dict[str, Any] | None:
     """What the build makes again from these files; only the saved reading is looked at."""
     from .deps import DEPS_FILE, load
@@ -546,7 +540,8 @@ def build_parser() -> argparse.ArgumentParser:
     map_cli.configure(
         sub.add_parser("map", parents=[common()],
                        help="which module uses which (reads the source, runs nothing)"),
-        modules=_archive_modules, marks=_probe_marks, outputs=_output_modules,
+        modules=_archive_modules, marks=_probe_marks, outputs=_outputs_of,
+        mask_names=_knowledge_names,
         builds=_map_builds, rules=_knowledge_rules)
     knowledge_cli.configure(
         sub.add_parser("knowledge", parents=[common()],

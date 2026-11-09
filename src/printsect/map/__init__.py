@@ -16,7 +16,7 @@ from .index import FileEntry, Index
 
 # The sections of printsect.yaml this tool reads. Its own keys are checked by the
 # indexer picked with map.type, which may be a plugin with keys of its own.
-SECTIONS: Schema = {"map": {"type": str}}
+SECTIONS: Schema = {"map": {"type": str}, "public": {"mask": list, "hide_sources": bool}}
 
 __all__ = ["FileEntry", "Index", "SECTIONS", "make_indexer"]
 

@@ -121,6 +121,7 @@ table.t tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offse
   <h1 id="title"></h1>
   <div class="meta" id="meta"></div>
   <div class="meta" id="limits"></div>
+  <div class="warn" id="public" hidden></div>
 </header>
 <div class="bar">
   <div class="tabs" role="tablist" id="tabs"></div>
@@ -518,6 +519,10 @@ function renderUnresolved() {
 }
 function renderChanges() {
   const left = $("left"), names = Object.keys(D.changes);
+  if (D.public) {
+    left.append(el("p", "hint", "Snapshots hold real names, so a public copy leaves them out."));
+    return;
+  }
   if (!names.length) {
     left.append(el("p", "hint", "No snapshot yet. Run psect map save, change the code, and make this page again to see what moved."));
     return;
@@ -904,6 +909,7 @@ function applyTheme() {
 $("title").textContent = D.name + " — code map";
 $("meta").textContent = D.files.length + " source files · counts are (symbol, using file) pairs, a measure of contact, not of importance";
 $("limits").textContent = D.limits.join(" · ");
+if (D.public) { $("public").hidden = false; $("public").textContent = "Public copy: " + D.public; }
 for (const [id, text] of TABS) {
   const b = el("button", "", text);
   b.id = "tab-" + id;

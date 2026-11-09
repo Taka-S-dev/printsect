@@ -45,6 +45,7 @@ in a project set up for all of them. A section whose keys depend on a plugin
 | `cli.py` | `--json` / `--root`, JSON answers, exit codes (0 ok, 1 failed, 2 config, 3 waiting for a person) |
 | `config.py` | Finding the project root; `printsect.yaml` + `printsect.local.yaml`; defaults; checking settings |
 | `init_config.yaml`, `init_local.yaml` | What `psect init` writes: every section, commented, with made-up examples |
+| `masking.py` | Taking names out of a copy to hand on, and the check before it is written |
 | `plugins.py` | Roles and their implementations: builtin or from entry points `printsect.<role>` |
 | `errors.py` | `PsectError`, `ConfigError` |
 | `fsutil.py` | Atomic writes; the `.printsect/` folder that ignores itself for git |

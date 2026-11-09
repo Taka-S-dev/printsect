@@ -46,8 +46,11 @@ left out: same name in several files 80 symbol(s) (391 use(s)); static elsewhere
 **Modules** は並べ替えられる表、**Problems**・**Unresolved**・**Changes** は `issues`・`unresolved`・`diff` にあたります。
 上の検索で関数、変数、ファイル、モジュール、`FILE:LINE` を探せます。選ぶと、定義の場所、各利用の行、変更の届く範囲が出ます。
 `Trace from here` を押して別のものを選ぶと、その間の道すじが出ます。アーカイブ、最終成果物、フォルダでまとめ直せ、
-コードの分類ごとに外せます。`--links` はファイルを VS Code で開くリンクを付けますが、このフォルダのパスがページに入るので、人に渡すページには付けないでください。
-名前を伏せたコピーを作るのは `psect-deps html --public` です。
+コードの分類ごとに外せます。`--links` はファイルを VS Code で開くリンクを付けますが、このフォルダのパスがページに入ります。
+
+`psect-map html --public` は人に渡すコピーを `.printsect/map.public.html` に作ります。`public.mask` の名前、`psect map` では知識ファイルの名前、このフォルダの名前を、
+ページの内容を計算する前に取り除くので、計算結果に元の名前は残りません。`--hide-sources` か `public.hide_sources` でファイル名とシンボル名も置き換えます。
+スナップショットは含めません。書き出す直前に内容を確認し、名前、絶対パス、パスワードらしきものが残っていれば何も書きません。
 
 ## 数えるもの
 
@@ -114,6 +117,7 @@ Windows ではウイルス対策の検査が 1 つずつ入るため、長くか
 | `.printsect/map.json` | 各ファイルが定義し、使っているもの。変わったファイルだけを読み直すため |
 | `.printsect/map.NAME.snapshot.json` | `psect-map save` が保存したもの |
 | `.printsect/map.html` | `psect-map html` のページ。ファイルや関数の名前が入ります |
+| `.printsect/map.public.html` | `psect-map html --public` のページ。人に渡すためのもの |
 
 ## 中身
 

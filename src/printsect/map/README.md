@@ -53,8 +53,14 @@ Find a function, variable, file, module or `FILE:LINE` at the top. Picking one s
 defined, each use with its line, and what a change can reach; `Trace from here`, then a second
 pick, gives the way between them. You can group by archive, final output or folder, and leave out
 classes of code. `--links` adds links that open a file in VS Code, and puts this folder's path in
-the page, so leave it off a page you hand on; it is `psect-deps html --public` that makes a copy
-with names masked.
+the page.
+
+`psect-map html --public` makes a copy to hand on, as `.printsect/map.public.html`. The names in
+`public.mask`, in knowledge files under `psect map`, and this folder's name are taken out before
+the page is worked out, so what it derives cannot hold them; `--hide-sources` or
+`public.hide_sources` replaces file and symbol names too. Snapshots are left out. The text about
+to be written is then checked, and if a name, an absolute path or something like a password
+remains, nothing is written.
 
 ## What is counted
 
@@ -133,6 +139,7 @@ point group `printsect.indexer`; it needs `__init__(settings)` and
 | `.printsect/map.json` | What each file defines and uses, so only changed files are read again |
 | `.printsect/map.NAME.snapshot.json` | What `psect-map save` kept |
 | `.printsect/map.html` | The page from `psect-map html`. Names your files and functions |
+| `.printsect/map.public.html` | The page from `psect-map html --public`, made to hand on |
 
 ## Inside
 

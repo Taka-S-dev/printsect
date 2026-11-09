@@ -32,11 +32,13 @@ from ..core.cli import common, common_below, out, project, run
 from ..core.config import Project
 from ..core.errors import PsectError
 from .analysis import _valid, difference, impact, issues, path, snapshot, summary, unresolved
-from .model import Map, build, classify
+from .model import Map, Tables, build, classify
 
 Modules = Callable[[Project], "dict[str, str] | None"]
 Marks = Callable[[Project], dict[str, list[dict[str, Any]]]]
 Builds = Callable[[Project, list[str]], "dict[str, Any] | None"]
+Outputs = Callable[[Project], "dict[str, list[str]] | None"]
+MaskNames = Callable[[Project], list[str]]
 DEFAULT_TOP = 30
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _FILE_LINE = re.compile(r"(.+\.\w+):(\d+)")
@@ -59,8 +61,17 @@ def no_marks(project: Project) -> dict[str, list[dict[str, Any]]]:
     return {}
 
 
-def no_outputs(project: Project) -> dict[str, str] | None:
+def no_outputs(project: Project) -> dict[str, list[str]] | None:
     return None
+
+
+def no_names(project: Project) -> list[str]:
+    return []
+
+
+def _joined(owner: dict[str, list[str]]) -> dict[str, str]:
+    """Each file's module: the outputs it ends up in make one name when there are several."""
+    return {file: "+".join(modules) for file, modules in owner.items()}
 
 
 def no_builds(project: Project, files: list[str]) -> dict[str, Any] | None:
@@ -79,10 +90,10 @@ def _grouping(args: argparse.Namespace, proj: Project) -> dict[str, str] | None:
     if args.no_build_info:
         return None
     if args.by_out:
-        groups: dict[str, str] | None = args.map_outputs(proj)
+        groups: dict[str, list[str]] | None = args.map_outputs(proj)
         if groups is None:
             raise PsectError("--by-out needs the build: psect deps, then psect map --by-out")
-        return groups
+        return _joined(groups)
     if args.by_dir:
         return None
     grouped: dict[str, str] | None = args.map_modules(proj)
@@ -565,30 +576,73 @@ def cmd_html(args: argparse.Namespace) -> int:
     from ..core.timeutil import now
     from .page import DIRECTORY, first_uses, page_data, render
 
+    if args.public and args.links:
+        raise PsectError("--links puts this folder's path on the page: leave it off a public copy")
     code_map = _map(args)
     proj, tables = args.map_project, code_map.t
-    groupings: dict[str, dict[str, str] | None] = {}
+    groupings: dict[str, dict[str, list[str]] | None] = {}
     if not args.by_dir:
         archives, outputs = args.map_modules(proj), args.map_outputs(proj)
         if archives:
-            groupings["archive"] = archives
+            groupings["archive"] = {f: [m] for f, m in archives.items()}
         if outputs:
             groupings["output"] = outputs
     groupings[DIRECTORY] = None
     default = "output" if args.by_out and "output" in groupings else next(iter(groupings))
-    now_snapshot = snapshot(code_map)
-    changes = {name: difference(saved, now_snapshot, 1 << 30)
-               for name, saved in _snapshots(proj).items()}
-    page = render(page_data(
-        name=proj.root.name, generated=now(), tables=tables, groupings=groupings, default=default,
-        classes=args.map_classes, layers=[str(x) for x in args.map_layers],
-        limits=_limits(code_map.overview(1)),
-        lines=first_uses(args.map_indexer, proj, tables), marks=args.map_marks(proj),
-        changes=changes, root=proj.root.as_posix() if args.links else ""), proj.root.name)
-    path, opened = save_page(args, proj, "map.html", page)
-    out(args, {"file": str(path), "opened": opened},
-        f"wrote {path}" + (" (opened in the browser)" if opened else ""))
+    parts: dict[str, Any] = {
+        "layers": [str(x) for x in args.map_layers],
+        "lines": first_uses(args.map_indexer, proj, tables),
+        "marks": args.map_marks(proj), "classes": args.map_classes}
+    if args.public:
+        page, report = _public_page(args, proj, tables, groupings, default, parts)
+    else:
+        report = None
+        now_snapshot = snapshot(code_map)
+        changes = {name: difference(saved, now_snapshot, 1 << 30)
+                   for name, saved in _snapshots(proj).items()}
+        joined = {k: _joined(v) if v else None for k, v in groupings.items()}
+        page = render(page_data(
+            name=proj.root.name, generated=now(), tables=tables, groupings=joined,
+            default=default, limits=_limits(code_map.overview(1)), changes=changes,
+            root=proj.root.as_posix() if args.links else "", **parts), proj.root.name)
+    path, opened = save_page(args, proj, "map.public.html" if args.public else "map.html", page)
+    said = f"wrote {path}" + (" (opened in the browser)" if opened else "")
+    if report:
+        said += ("\nmasked: {names} name(s), {files_hidden} file name(s) hidden, "
+                 "{symbols_hidden} symbol(s) hidden; snapshots left out").format(**report)
+    out(args, {"file": str(path), "opened": opened, "masked": report}, said)
     return 0
+
+
+def _public_page(args: argparse.Namespace, proj: Project, tables: Tables,
+                 groupings: dict[str, dict[str, list[str]] | None], default: str,
+                 parts: dict[str, Any]) -> tuple[str, dict[str, int]]:
+    """The page with the names taken out, or an error if something would still go out."""
+    from ..core.cli import script_json
+    from ..core.masking import Masker, leaks
+    from .page import masked, page_data, project_text, render
+
+    settings = proj.settings.get("public") or {}
+    masker = Masker([*(settings.get("mask") or []), *args.map_mask_names(proj), proj.root.name],
+                    bool(args.hide_sources or settings.get("hide_sources")))
+    # A folder name is worked out here: once the files are renamed there are no folders.
+    real = {key: owner if owner else {f: [m] for f, m in Map(tables).owner.items()}
+            for key, owner in groupings.items()}
+    made = masked(masker, tables, real, parts["classes"], parts["layers"], parts["lines"],
+                  parts["marks"])
+    first = Map(made["tables"], made["groupings"][default])
+    data = page_data(name="project", generated="", groupings=made["groupings"], default=default,
+                     tables=made["tables"], classes=made["classes"], layers=parts["layers"],
+                     limits=_limits(first.overview(1)), lines=made["lines"], marks=made["marks"],
+                     changes={}, root="", public="placeholder", rank=made["rank"])
+    report = {"names": 0, "files_hidden": 0, "symbols_hidden": 0, **masker.counts}
+    data["public"] = (f"{report['names']} names masked, {report['files_hidden']} file names "
+                      f"hidden, {report['symbols_hidden']} symbols hidden; snapshots left out.")
+    found = leaks(script_json(data), masker.names, proj.root.as_posix(), own=project_text(data))
+    if found:
+        raise PsectError("not written: this would still go out: " + "; ".join(found)
+                         + ". Add what is wrong to public.mask, or use --hide-sources")
+    return render(data, "project"), report
 
 
 def _positive(text: str) -> int:
@@ -599,14 +653,16 @@ def _positive(text: str) -> int:
 
 
 def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None,
-              marks: Marks | None = None, outputs: Modules | None = None,
+              marks: Marks | None = None, outputs: Outputs | None = None,
               builds: Builds | None = None,
-              rules: Callable[[Project], dict[str, Any]] | None = None) -> None:
+              rules: Callable[[Project], dict[str, Any]] | None = None,
+              mask_names: MaskNames | None = None) -> None:
     """Add the map options and actions to `parser` (which already has --json/--root).
 
     `modules(project)` gives {source file: module}, the files the build uses, or None;
     `marks(project)` gives {file: [{"n": 7, ...}]} to show where probes are.
-    `outputs(project)` gives {source file: output} for --by-out;
+    `outputs(project)` gives {source file: [its outputs]} for --by-out;
+    `mask_names(project)` gives names to take out of a public page;
     `builds(project, files)` gives what the build makes again from them;
     `rules(project)` gives {"classes": ..., "layers": ...} to use beside the settings.
     """
@@ -623,6 +679,7 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
     parser.set_defaults(func=cmd_overview, map_modules=modules or no_modules,
                         map_marks=marks or no_marks, map_outputs=outputs or no_outputs,
                         map_builds=builds or no_builds, map_rules=rules or no_rules,
+                        map_mask_names=mask_names or no_names,
                         sections=SECTIONS)
     below = common_below()
     below.add_argument("--top", type=_positive, default=argparse.SUPPRESS, metavar="N",
@@ -671,6 +728,10 @@ def configure(parser: argparse.ArgumentParser, *, modules: Modules | None = None
     p.add_argument("--no-open", action="store_true", help="do not open it in the browser")
     p.add_argument("--links", action="store_true",
                    help="add links that open files in VS Code (puts this folder's path on it)")
+    p.add_argument("--public", action="store_true",
+                   help="a copy to hand on: names masked (public.mask), then checked")
+    p.add_argument("--hide-sources", action="store_true",
+                   help="with --public, also replace file and symbol names")
     p.set_defaults(func=cmd_html)
     p = sub.add_parser("save", parents=[below], help="keep the map as it is now, to compare later")
     p.add_argument("snapshot", nargs="?", default="last", help="a name for it (default: last)")

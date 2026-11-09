@@ -852,3 +852,79 @@ def test_the_page_can_group_by_the_build(project):
     _, d = page_of(p)
     assert d["default"] == "archive" and set(d["groupings"]) == {"archive", "output", "directory"}
     assert "libnet.a" in d["groupings"]["archive"]["names"]
+
+
+ACME = {"acme/rx.c": b"int acme_rx(int n) { return ring_put(n); }\n",
+        "util/ring.c": b"int ring_put(int n) { return n; }\n"}
+MASK = "public:\n  mask: [acme]\n"
+
+
+def public_of(p):
+    page = (p.root / ".printsect" / "map.public.html").read_text(encoding="utf-8")
+    start = page.index('id="data">') + len('id="data">')
+    return page, json.loads(page[start:page.index("</script>", start)])
+
+
+def test_a_public_page_has_the_names_out_of_everything_it_works_out(project, capsys):
+    p = project(ACME, config=MASK)
+    (p.root / ".printsect").mkdir(exist_ok=True)
+    assert main(["save", "--root", str(p.root)]) == 0
+    capsys.readouterr()
+    assert main(["html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    page, d = public_of(p)
+    assert "acme" not in page.lower() and p.root.name not in page
+    assert d["name"] == "project" and d["changes"] == {} and d["root"] == ""
+    assert any(f.endswith("/rx.c") for f in d["files"]) and "util/ring.c" in d["files"]
+    assert any(n.endswith("_rx") for n in d["symbols"]) and "ring_put" in d["symbols"]
+    assert "masked: " in capsys.readouterr().out
+
+
+def test_hiding_sources_replaces_files_symbols_and_folders(project):
+    p = project(ACME, config=MASK + "  hide_sources: true\n")
+    assert main(["html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    page, d = public_of(p)
+    for name in ("ring_put", "util/", "rx.c", "acme"):
+        assert name not in page
+    assert all(f.startswith("file-") for f in d["files"]) and len(d["edges"]) == 1
+    assert all(m.startswith("module-") for m in d["groupings"]["directory"]["names"])
+
+
+def test_the_layers_still_count_once_the_names_are_gone(project):
+    p = project({"low/a.c": b"int a(void) { return b(); }\n",
+                 "high/b.c": b"int b(void) { return 0; }\n"},
+                config="map:\n  layers: ['high/*', 'low/*']\npublic:\n  hide_sources: true\n")
+    assert main(["html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    assert public_of(p)[1]["views"]["directory"]["issues"]["against_layers"]["total"] == 1
+
+
+def test_a_public_page_with_links_is_refused(project, capsys):
+    p = project(ACME)
+    assert main(["html", "--public", "--links", "--no-open", "--root", str(p.root)]) == 1
+    assert not (p.root / ".printsect" / "map.public.html").exists()
+
+
+def test_a_public_page_is_not_written_past_a_refused_knowledge_file(project, capsys):
+    p = project({**ACME, ".printsect/knowledge/n.yaml": b"mask: 3\n"})
+    assert psect(["map", "html", "--public", "--no-open", "--root", str(p.root)]) == 1
+    assert "refused" in capsys.readouterr().err
+    assert not (p.root / ".printsect" / "map.public.html").exists()
+
+
+def test_the_names_in_knowledge_files_are_masked_on_a_public_page(project):
+    p = project({**ACME, ".printsect/knowledge/n.yaml": b"mask: [acme]\n"})
+    assert psect(["map", "html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    assert "acme" not in public_of(p)[0].lower()
+
+
+def test_an_output_with_a_plus_in_its_folder_is_masked_whole(project):
+    from printsect.deps import save
+    from printsect.deps.graph import Graph
+
+    p = project(ACME, config="public:\n  hide_sources: false\n")
+    save(p, Graph(objects={"r.o": {"source": "acme/rx.c"}, "u.o": {"source": "util/ring.c"}},
+                  outs={"/data/a+b/secret/x.out": {"objects": ["r.o", "u.o"]},
+                        "/data/two/y.out": {"objects": ["r.o"]}}))
+    assert psect(["map", "html", "--public", "--no-open", "--root", str(p.root)]) == 0
+    page, d = public_of(p)
+    assert "/data" not in page and "secret" not in page
+    assert "(outside)/x.out+(outside)/y.out" in d["groupings"]["output"]["names"]
